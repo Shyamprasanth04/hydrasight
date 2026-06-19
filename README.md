@@ -1,322 +1,202 @@
-# HydraSight
+<div align="center">
+
+# 🐍 HydraSight
+
+**AI-orchestrated offensive security assessment framework for authorized lab environments.**
 
 [![CI](https://github.com/Shyamprasanth04/hydrasight/actions/workflows/ci.yml/badge.svg)](https://github.com/Shyamprasanth04/hydrasight/actions/workflows/ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-> AI-orchestrated offensive security assessment framework for authorized lab environments.
+*A local, interactive CLI framework connecting local LLMs to Kali Linux MCP.*
 
-**HydraSight is for authorized testing only.** Do not use against systems you do not own or have explicit written permission to test.
+---
+
+**⚠️ AUTHORIZED TESTING ONLY ⚠️**  
+Do not use against systems you do not own or have explicit written permission to test.  
 See our [Security Policy](SECURITY.md) and [Contributing Guidelines](CONTRIBUTING.md).
 
----
-
-## What is HydraSight?
-
-HydraSight is a local, interactive CLI framework that connects a **local LLM** (via [Ollama](https://ollama.com)) to a **[Kali Linux MCP server](https://www.kali.org/blog/kali-linux-model-context-protocol-server/)** and orchestrates penetration testing tools through a stateful, safety-gated dispatch layer.
-
-It is designed for security practitioners running structured assessments in isolated lab environments. It is not a product, not a cloud service, and not a chatbot.
+</div>
 
 ---
 
-## Features
+## 📖 Table of Contents
+- [What is HydraSight?](#-what-is-hydrasight)
+- [Key Features](#-key-features)
+- [Architecture Overview](#-architecture-overview)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Quick Start](#-quick-start)
+- [Command Reference](#-command-reference)
+
+---
+
+## 🎯 What is HydraSight?
+
+HydraSight is designed for security practitioners running structured assessments in isolated lab environments. It bridges the gap between AI reasoning and active security tooling.
+
+By connecting a **local LLM** (via [Ollama](https://ollama.com)) to a **[Kali Linux MCP server](https://www.kali.org/blog/kali-linux-model-context-protocol-server/)**, HydraSight orchestrates penetration testing tools through a stateful, safety-gated dispatch layer.
+
+> **Note:** HydraSight is not a general-purpose chatbot, a product, or a cloud service. It is a strictly controlled, local-first operator console.
+
+---
+
+## ✨ Key Features
 
 | Feature | Description |
-|---|---|
-| **Natural language interface** | Describe what you want — HydraSight classifies, proposes, confirms, then executes |
-| **Strict mode separation** | Chat never dispatches tools. `/run` and `autopwn` are the only execution paths |
-| **Stateful REPL** | Persistent findings, timeline, credentials, sessions across a full engagement |
-| **Adaptive planner** | Branch-aware engagement plans: recon-only, validation, credential-led, exploit-led, post-access |
-| **Rules of Engagement** | Scope via `hydrasight.roe.json` — allowed targets, blocked ports, approval gates, kill switch |
-| **Finding verification** | Second-pass targeted probes to confirm or deny CRITICAL/HIGH findings |
-| **Confidence scoring** | Every finding and suggestion carries a 0.0–1.0 confidence score |
-| **Dry-run planning** | `plan` and `suggest` show the full intent before anything runs |
-| **Generic access paths** | SSH credential reuse, FTP enumeration, web admin login — not just Metasploit |
-| **Planner memory** | Avoids repeated dead paths; tracks credential attempts across phases |
-| **PDF reporting** | Dark-themed report with verified/unverified findings, confidence scores, remediation notes |
-| **Fake-execution guard** | AI responses claiming to run tools are detected and replaced with safe clarifications |
+| :--- | :--- |
+| **🧠 Natural Language Interface** | Describe your intent. HydraSight classifies, proposes, confirms, and executes. |
+| **🛡️ Strict Mode Separation** | Chat *never* dispatches tools. `/run` and `autopwn` are explicit execution paths. |
+| **💾 Stateful REPL** | Maintains findings, timeline, credentials, and sessions across the engagement. |
+| **🧭 Adaptive Planner** | Branch-aware planning: recon-only, validation, credential-led, exploit-led, and post-access. |
+| **🚦 Rules of Engagement (ROE)**| Scope enforcement via `hydrasight.roe.json` (targets, ports, approval gates, kill switch). |
+| **✅ Finding Verification** | Second-pass targeted probes automatically verify CRITICAL/HIGH findings. |
+| **📊 Confidence Scoring** | Every finding and suggestion is backed by a `0.0–1.0` confidence score. |
+| **🧪 Dry-Run Planning** | `plan` and `suggest` commands reveal full AI intent before packets are sent. |
+| **📝 PDF Reporting** | Generates dark-themed PDF reports with verified findings and remediation notes. |
 
 ---
 
-## Repository Layout
+## 🏗️ Architecture Overview
 
+HydraSight's architecture ensures that AI cannot blindly fire exploits. Every action passes through deterministic parsing, planning, and policy enforcement layers.
+
+```mermaid
+graph TD
+    A[Shell / REPL] --> B[Engine Orchestrator]
+    B --> C[Engagement Planner]
+    B --> D[Rules of Engagement]
+    
+    B --> E[AIClient - Ollama]
+    B --> F[Dispatcher]
+    
+    F --> G[Kali MCP Server]
+    
+    G --> H[ExploitSuggestionProvider]
+    G --> I[PostAccessHandler]
+    
+    H --> J[(Findings State)]
+    I --> J
+    J --> K[VerifierService]
 ```
-hydrasight/
-├── hydrasight/                  — main Python package
-│   ├── cli/
-│   │   ├── shell.py             — interactive REPL (all user interaction)
-│   │   └── display.py           — Rich console helpers
-│   ├── config/
-│   │   ├── defaults.py          — colour tokens, phase defs, tool timeouts, system prompts
-│   │   └── loader.py            — loads hydrasight.json + env vars
-│   ├── core/
-│   │   ├── engine.py            — engagement orchestration (run, plan, exploit, post-exploit)
-│   │   └── planner.py           — EngagementPlanner, branch selection
-│   ├── integrations/
-│   │   ├── kali_api.py          — HTTP client for kali-server-mcp
-│   │   ├── exploit_db.py        — CVE → Metasploit module map
-│   │   └── exploit_suggestion.py— ExploitSuggestionProvider
-│   ├── models/
-│   │   ├── findings.py          — shared state (ports, vulns, creds, sessions, timeline)
-│   │   ├── finding_record.py    — typed, confidence-scored finding
-│   │   ├── planner_state.py     — engagement memory and retry tracking
-│   │   └── roe.py               — Rules of Engagement model
-│   ├── parsers/                 — tool output → findings fields
-│   ├── reporting/               — JSON and PDF reporters
-│   ├── services/
-│   │   ├── ai_client.py         — orchestration LLM (tool-call extraction)
-│   │   ├── chat_controller.py   — safe conversational path (never dispatches tools)
-│   │   ├── intent_classifier.py — pure regex NL classification (zero AI calls)
-│   │   ├── action_planner.py    — builds PendingAction from IntentResult
-│   │   ├── dispatcher.py        — executes tool_call dicts via KaliAPI
-│   │   ├── execution_policy.py  — confirm / auto / never modes
-│   │   ├── verifier.py          — second-pass finding verification
-│   │   └── post_access.py       — PostAccessHandler (Meterpreter, Shell, SSH, FTP, Web)
-│   └── utils/                   — IP validation, timestamps
-├── tests/                       — 393 offline pytest tests (all mocked)
-├── .github/workflows/ci.yml     — GitHub Actions CI (Python 3.10/3.11/3.12)
-├── hydrasight.json              — default runtime configuration
-├── hydrasight.json.example      — safe config template (no real IPs)
-├── pyproject.toml               — build, lint, and test configuration
-├── PROJECT_CONTEXT.md           — developer reference and architecture detail
-└── README.md                    — this file
-```
+
+*(See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for an in-depth code architecture breakdown).*
 
 ---
 
-## Architecture Overview
+## ⚙️ Installation
 
-```
-┌────────────────────────────────────────────────────────────┐
-│                      Shell (REPL)                          │
-│  autopwn │ scan │ verify │ plan │ suggest │ conclusion ...  │
-└───────────────────────────┬────────────────────────────────┘
-                            │
-            ┌───────────────▼───────────────┐
-            │           Engine              │
-            │  EngagementPlanner            │ ← branch-aware planning
-            │  PlannerState                 │ ← memory, retry tracking
-            │  ROE Enforcer                 │ ← gates, limits, kill switch
-            └────────┬──────────┬───────────┘
-                     │          │
-         ┌───────────▼──┐  ┌────▼──────────────────┐
-         │  AIClient    │  │  Dispatcher            │
-         │  (Ollama)    │  │  → KaliAPI (/api/cmd)  │
-         └──────────────┘  └────────────────────────┘
-                                      │
-            ┌─────────────────────────▼──────────────────────┐
-            │         ExploitSuggestionProvider               │
-            │   metasploit │ ssh_access │ ftp │ web_login     │
-            └─────────────────────────┬──────────────────────┘
-                                      │
-            ┌─────────────────────────▼──────────────────────┐
-            │         PostAccessHandler                       │
-            │   Meterpreter │ Shell │ SSH │ FTP │ WebAdmin    │
-            └─────────────────────────┬──────────────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │   Findings (shared)      │
-                         │   FindingRecord          │ ← typed, confidence-scored
-                         │   VerifierService        │ ← second-pass probes
-                         └─────────────────────────┘
-```
-
----
-
-## Installation
+To set up HydraSight for development or usage:
 
 ```bash
-# Clone
-git clone https://github.com/<your-username>/hydrasight.git
+# 1. Clone the repository
+git clone https://github.com/Shyamprasanth04/hydrasight.git
 cd hydrasight
 
-# Install (editable + dev tools)
+# 2. Install (editable mode with dev tools)
 pip install -e ".[dev]"
 ```
 
-**Prerequisites:**
+### Prerequisites
 
-| Component | Where to run | Notes |
-|---|---|---|
-| Python 3.10+ | Your machine | `pip install -e ".[dev]"` |
-| [Ollama](https://ollama.com) | Your machine | `ollama serve && ollama pull qwen2.5:7b` |
-| [Kali MCP server](https://www.kali.org/blog/kali-linux-model-context-protocol-server/) | Kali VM | `kali-linux-mcp --transport sse` |
+| Component | Environment | Action |
+| :--- | :--- | :--- |
+| **Python 3.10+** | Host Machine | Run `pip install` |
+| **[Ollama](https://ollama.com)** | Host Machine | `ollama serve && ollama pull qwen2.5:7b` |
+| **[Kali MCP](https://www.kali.org/blog/kali-linux-model-context-protocol-server/)** | Kali VM | `kali-linux-mcp --transport sse` |
 
 ---
 
-## Configuration
+## 🔧 Configuration
 
-Copy the example config and edit for your environment:
+Copy the example configuration to establish your environment settings:
 
 ```bash
 cp hydrasight.json.example hydrasight.json
 ```
 
-Key fields in `hydrasight.json`:
-
+**Example `hydrasight.json`:**
 ```json
 {
   "ollama_url":    "http://localhost:11434",
   "kali_api_url":  "http://<kali-vm-ip>:<port>",
   "model":         "qwen2.5:7b",
-  "lport":         4444,
   "execution_mode": "confirm"
 }
 ```
 
-Override any setting with an environment variable prefixed `HYDRA_`:
-
-```bash
-HYDRA_OLLAMA_URL=http://192.168.x.x:11434
-HYDRA_MODEL=llama3.1:8b
-HYDRA_EXECUTION_MODE=never
-```
-
-> **Never commit your `.env` or a `hydrasight.json` with real target IPs.** Both are in `.gitignore`.
+> 💡 **Tip:** You can override any setting using environment variables prefixed with `HYDRA_` (e.g., `HYDRA_MODEL=llama3.1:8b`).
 
 ---
 
-## Rules of Engagement (optional)
+## 🚀 Quick Start
 
-Create `hydrasight.roe.json` to scope the engagement:
-
-```json
-{
-  "allowed_targets": ["10.0.2.0/24"],
-  "blocked_ports": [22],
-  "blocked_modules": ["exploit/windows/smb/ms17_010_eternalblue"],
-  "require_approval_for": ["EXPLOIT", "POST_EXPLOIT"],
-  "max_runtime_minutes": 60,
-  "max_threads": 4,
-  "kill_switch": false
-}
-```
-
-If no file is present, permissive defaults are used. All actions are checked against ROE before execution.
-
----
-
-## First Run
+Start the REPL environment:
 
 ```bash
 python -m hydrasight
+```
 
-# Check system health
-hydrasight › status
-
-# See what the planner would do (dry run — no execution)
-hydrasight › plan
-
-# Begin a full engagement
-hydrasight › autopwn 10.0.2.5
+Inside the HydraSight console:
+```text
+hydrasight › status             # Verify Ollama & Kali connectivity
+hydrasight › plan               # View the branch-aware roadmap (dry run)
+hydrasight › autopwn 10.0.2.5   # Begin a full, adaptive engagement
 ```
 
 ---
 
-## Shell Commands
+## 💻 Command Reference
 
-### Engagement
-```
-autopwn <ip>     Adaptive full-spectrum assessment
-scan <ip>        Deep port scan only
-abort            Abort current engagement
-verify           Run second-pass verification on findings
-```
+<details>
+<summary><strong>Click to expand all REPL commands</strong></summary>
 
-### Planning (dry-run, nothing executes)
-```
-plan             Branch-aware engagement roadmap
-suggest          Ranked access/exploit candidates with confidence
-conclusion       Engagement outcome summary
-```
+### ⚔️ Engagement Actions
+*   `autopwn <ip>`: Adaptive full-spectrum assessment
+*   `scan <ip>`: Deep port scan only
+*   `verify`: Run second-pass verification on current findings
+*   `abort`: Abort current engagement
 
-### Natural Language
-```
-<any request>              Auto-classified — explains, proposes, or confirms before acting
-/ask <question>            Force chat mode — never executes tools
-/run <action>              Force tool routing, e.g. /run check smb on 192.168.1.10
-yes / confirm              Confirm a proposed action
-no / cancel                Cancel a proposed action
-do all planned stuff       Resume full planned engagement
-verify findings            Trigger second-pass verification
-suggest next step          Show ranked suggestions
-conclusion                 Show outcome summary
-```
+### 🗺️ Planning (No Execution)
+*   `plan`: Branch-aware engagement roadmap
+*   `suggest`: Ranked access/exploit candidates with confidence
+*   `conclusion`: Engagement outcome summary
 
-### Execution Mode
-```
-mode confirm     Always ask before NL-initiated execution (default)
-mode auto        High-confidence requests execute automatically
-mode never       NL never executes tools — explain/suggest only
-```
+### 🗣️ Natural Language Interface
+*   `<any request>`: Auto-classified — explains, proposes, or confirms before acting.
+*   `/ask <question>`: Force chat mode — never executes tools.
+*   `/run <action>`: Force tool routing (e.g., `/run check smb on 192.168.1.10`).
+*   `yes` / `confirm`: Confirm a proposed action.
+*   `no` / `cancel`: Cancel a proposed action.
 
-### Data
-```
-findings         All discovered data
-ports            Open ports
-vulns            Vulnerabilities
-creds            Captured credentials
-hashes           NTLM hashes
-sessions         Active access sessions
-```
+### 🛡️ Execution Modes
+*   `mode confirm`: Always ask before NL-initiated execution (default).
+*   `mode auto`: High-confidence requests execute automatically.
+*   `mode never`: NL never executes tools — explain/suggest only.
 
-### Output
-```
-save [file]      Save findings to JSON
-report <ip>      Generate PDF report
-```
+### 🗃️ Data Inspection
+*   `findings`, `ports`, `vulns`, `creds`, `hashes`, `sessions`
 
-### System
-```
-status           System health check (Ollama + Kali MCP connectivity)
-roe              Rules of Engagement status
-config           Current configuration
-stats            Session statistics
-verbose 0-3      Output verbosity
-clear            Reset session state
-help             Full command reference
-exit             Save and quit
-```
+### 📤 Output & System
+*   `save [file]`: Save findings to JSON
+*   `report <ip>`: Generate PDF report
+*   `status`, `roe`, `config`, `stats`, `verbose 0-3`, `clear`, `help`, `exit`
+</details>
 
 ---
 
-## Running Tests
+## 🧪 Testing
 
-All 393 tests are offline — no Ollama, no Kali MCP server required:
+HydraSight features a robust offline test suite (393 tests). No Ollama or Kali server is required to run them:
 
 ```bash
 python -m pytest tests/ -q -p no:ethereum
-# 393 passed
 ```
 
 ---
 
-## Current Status
-
-| Component | Status |
-|---|---|
-| Core engine (run, plan, dispatch) | ✅ Complete |
-| ROE model + enforcement | ✅ Complete |
-| FindingRecord + confidence scoring | ✅ Complete |
-| VerifierService (second-pass probes) | ✅ Complete |
-| PlannerState (memory, retry tracking) | ✅ Complete |
-| ExploitSuggestionProvider | ✅ Complete |
-| PostAccessHandler (SSH, FTP, Web, Meterpreter) | ✅ Complete |
-| Branch-aware engagement planner | ✅ Complete |
-| `suggest` / `plan` / `conclusion` commands | ✅ Complete |
-| Natural language intent pipeline | ✅ Complete |
-| Operational meta-intents (execute\_plan, verify, suggest, conclude) | ✅ Complete |
-| Fake-execution guard | ✅ Complete |
-| PDF reporting (verified / confidence / exploit status) | ✅ Complete |
-| GitHub Actions CI | ✅ Present |
-| Multi-target / CIDR support | 🔲 Planned |
-| Web UI / dashboard | 🔲 Not planned |
-
----
-
-## License
-
-MIT License — see [LICENSE](LICENSE).
-
-**This software is for authorized security testing only.** The author assumes no liability for misuse. Use only against systems you own or have explicit written permission to test.
+<div align="center">
+  <b>Built with ❤️ for authorized security research.</b><br>
+  Released under the <a href="LICENSE">MIT License</a>.
+</div>
