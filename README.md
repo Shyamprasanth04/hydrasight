@@ -1,8 +1,14 @@
 # HydraSight
 
+[![CI](https://github.com/Shyamprasanth04/hydrasight/actions/workflows/ci.yml/badge.svg)](https://github.com/Shyamprasanth04/hydrasight/actions/workflows/ci.yml)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 > AI-orchestrated offensive security assessment framework for authorized lab environments.
 
 **HydraSight is for authorized testing only.** Do not use against systems you do not own or have explicit written permission to test.
+See our [Security Policy](SECURITY.md) and [Contributing Guidelines](CONTRIBUTING.md).
 
 ---
 
