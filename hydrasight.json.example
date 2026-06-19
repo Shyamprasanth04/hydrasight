@@ -1,0 +1,20 @@
+{
+  "ollama_url":      "http://localhost:11434",
+  "kali_api_url":    "http://<KALI-VM-IP>:<PORT>",
+  "model":           "qwen2.5:7b",
+  "context_size":    8192,
+  "max_retries":     3,
+  "retry_delay":     2.0,
+  "verbosity":       1,
+  "log_file":        "hydrasight.log",
+  "output_dir":      "./hydrasight_output",
+  "lport":           4444,
+  "token_budget":    6000,
+  "auto_pdf":        true,
+  "auto_save":       true,
+  "scan_range":      "1-1000",
+  "deep_scan_range": "1-65535",
+  "wordlist":        "/usr/share/wordlists/dirb/common.txt",
+  "rockyou_path":    "/usr/share/wordlists/rockyou.txt",
+  "execution_mode":  "confirm"
+}

@@ -1,0 +1,72 @@
+# ── Python artifacts ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+wheels/
+*.whl
+MANIFEST
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env.bak
+# NOTE: .env is ALWAYS excluded — it may contain real IPs and credentials
+.env
+
+# ── Test / coverage / lint ────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ── HydraSight runtime artifacts (never commit these) ────────────────────────
+# Scan output files contain real target data
+hydrasight_output/
+# Runtime log — noisy and environment-specific
+hydrasight.log
+# Session autosave files
+autosave_*.json
+autopwn_*.json
+findings_*.json
+report_*.pdf
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS artifacts ──────────────────────────────────────────────────────────────
+desktop.ini
+
+# ── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Type-checking ─────────────────────────────────────────────────────────────
+.pytype/
+pyrightconfig.json
