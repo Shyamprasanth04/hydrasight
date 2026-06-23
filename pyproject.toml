@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "hydrasight"
@@ -25,11 +25,15 @@ dev = [
     "black>=24.0",
     "isort>=5.13",
     "python-dotenv>=1.0",
+    "types-requests>=2.31.0",
 ]
 dotenv = ["python-dotenv>=1.0"]
 
 [project.scripts]
 hydrasight = "hydrasight.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["hydrasight*"]
 
 [tool.ruff]
 line-length = 100

@@ -2,8 +2,8 @@
 Intent router — maps freeform user text to pre-built tool-call dicts,
 bypassing the AI for well-known security command patterns.
 """
+
 import re
-from typing import Optional
 
 # Conversational input detector
 _CONVO_RE = re.compile(
@@ -66,7 +66,9 @@ def is_conversational(text: str) -> bool:
     return bool(_CONVO_RE.match(text.strip().rstrip("?!.,")))
 
 
-def route_intent(text: str, target: Optional[str]) -> Optional[dict]:
+
+
+def route_intent(text: str, target: str | None) -> dict | None:
     """
     Match freeform input against security intent patterns.
     Returns a pre-built tool_call dict or None if no match.
@@ -76,58 +78,15 @@ def route_intent(text: str, target: Optional[str]) -> Optional[dict]:
     for pattern, action in _INTENT_ROUTES:
         if pattern.search(text):
             if action == "nmap_smb_vuln":
-                return {
-                    "tool": "run_command",
-                    "args": {
-                        "command": (
-                            f"nmap --script smb-vuln-ms17-010,"
-                            f"smb-os-discovery -p 445 {target}"
-                        ),
-                    },
-                }
-            if action == "smb_enum":
-                return {
-                    "tool": "smb_enum",
-                    "args": {"target": target},
-                }
-            if action == "smbclient_enum":
-                return {
-                    "tool": "run_command",
-                    "args": {
-                        "command": (
-                            f"smbclient -L //{target} -N 2>&1 | head -40"
-                        ),
-                    },
-                }
-            if action == "nmap_ssh":
-                return {
-                    "tool": "run_command",
-                    "args": {
-                        "command": (
-                            f"nmap --script ssh-auth-methods,"
-                            f"ssh2-enum-algos -p 22 {target}"
-                        ),
-                    },
-                }
-            if action == "nmap_ftp":
-                return {
-                    "tool": "run_command",
-                    "args": {
-                        "command": (
-                            f"nmap --script ftp-anon,ftp-vuln* "
-                            f"-sV -p 21 {target}"
-                        ),
-                    },
-                }
-            if action == "nmap_vuln":
-                return {
-                    "tool": "run_command",
-                    "args": {
-                        "command": (
-                            f"nmap -sV --script vuln -T4 -Pn "
-                            f"--script-timeout 60s "
-                            f"-p 21,22,80,135,139,445 {target}"
-                        ),
-                    },
-                }
+                return {"tool": "smb_check", "args": {"target": target}}
+            elif action == "smb_enum":
+                return {"tool": "smb_enum", "args": {"target": target}}
+            elif action == "smbclient_enum":
+                return {"tool": "smbclient_enum", "args": {"target": target}}
+            elif action == "nmap_ssh":
+                return {"tool": "ssh_check", "args": {"target": target}}
+            elif action == "nmap_ftp":
+                return {"tool": "ftp_check", "args": {"target": target}}
+            elif action == "nmap_vuln":
+                return {"tool": "vuln_scan", "args": {"target": target}}
     return None

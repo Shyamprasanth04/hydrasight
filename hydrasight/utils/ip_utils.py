@@ -1,7 +1,7 @@
 """IP validation, sanitisation and correction utilities."""
-import re
+
 import ipaddress
-from typing import Optional
+import re
 
 
 def is_valid_ip(text: str) -> bool:
@@ -28,7 +28,7 @@ def dedup_ports(ports: list[dict]) -> list[int]:
 def force_ip(
     text: str,
     correct: str,
-    preserve: Optional[list[str]] = None,
+    preserve: list[str] | None = None,
 ) -> str:
     """
     Replace every IP address in *text* with *correct*,

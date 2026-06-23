@@ -25,14 +25,14 @@ Safety invariants
   - Ambiguous (CLARIFY) intents NEVER execute — ask first
   - mode='never' guarantees no NL execution under any circumstance
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import Literal, Optional
+from typing import Literal
 
-from hydrasight.services.intent_classifier import IntentResult, Intent
 from hydrasight.services.action_planner import PendingAction
+from hydrasight.services.intent_classifier import Intent, IntentResult
 
 # Minimum confidence to auto-execute in 'auto' mode
 AUTO_CONFIDENCE_THRESHOLD = 0.80
@@ -46,16 +46,16 @@ VALID_MODES: frozenset[str] = frozenset({"confirm", "auto", "never"})
 class PolicyDecision:
     """The outcome of applying ExecutionPolicy to an IntentResult."""
 
-    action  : Literal[
-        "execute",       # run the action immediately
-        "confirm",       # propose action + wait for confirmation
-        "suggest",       # explain what would be run, guide to explicit command
-        "clarify",       # ask a follow-up question
-        "chat",          # safe chat / explanation — no tool involvement
-        "plan",          # show dry-run plan
+    action: Literal[
+        "execute",  # run the action immediately
+        "confirm",  # propose action + wait for confirmation
+        "suggest",  # explain what would be run, guide to explicit command
+        "clarify",  # ask a follow-up question
+        "chat",  # safe chat / explanation — no tool involvement
+        "plan",  # show dry-run plan
     ]
-    message : Optional[str] = None   # extra message to show operator
-    pending : Optional[PendingAction] = None
+    message: str | None = None  # extra message to show operator
+    pending: PendingAction | None = None
 
     @property
     def is_safe(self) -> bool:
@@ -72,9 +72,9 @@ class ExecutionPolicy:
 
     def decide(
         self,
-        result  : IntentResult,
-        pending : Optional[PendingAction],
-        mode    : ExecutionMode = "confirm",
+        result: IntentResult,
+        pending: PendingAction | None,
+        mode: ExecutionMode = "confirm",
     ) -> PolicyDecision:
         """
         Apply execution policy.
@@ -103,8 +103,10 @@ class ExecutionPolicy:
         # Shell._on_bare_text handles these before checking policy decisions.
         # Return a safe "chat" sentinel so the policy layer doesn't block them.
         if result.intent in (
-            Intent.EXECUTE_PLAN, Intent.VERIFY_FINDINGS,
-            Intent.SHOW_SUGGESTIONS, Intent.SHOW_CONCLUSION,
+            Intent.EXECUTE_PLAN,
+            Intent.VERIFY_FINDINGS,
+            Intent.SHOW_SUGGESTIONS,
+            Intent.SHOW_CONCLUSION,
         ):
             return PolicyDecision(action="chat")
 

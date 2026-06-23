@@ -1,15 +1,14 @@
 """Entry point — python -m hydrasight"""
+
 import sys
 import traceback
 
-from hydrasight.config.loader import load_config
 from hydrasight.cli.shell import Shell
+from hydrasight.config.loader import load_config
 
 
 def main() -> None:
-    if sys.version_info < (3, 10):
-        print("[!] Python 3.10+ required")
-        sys.exit(1)
+
     cfg = load_config()
     try:
         Shell(cfg).run()

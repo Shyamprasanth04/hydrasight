@@ -8,10 +8,10 @@ web applications, containers, mixed services).
 The ROE is loaded from `hydrasight.roe.json` alongside `hydrasight.json`.
 If no ROE file exists, a permissive default is used.
 """
+
 import ipaddress
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -24,28 +24,22 @@ class RulesOfEngagement:
     """
 
     # ── scope ─────────────────────────────────────────────────────────────────
-    allowed_targets       : list[str] = field(
-        default_factory=lambda: ["*"]
-    )
-    blocked_ports         : list[int] = field(default_factory=list)
-    blocked_modules       : list[str] = field(default_factory=list)
+    allowed_targets: list[str] = field(default_factory=lambda: ["*"])
+    blocked_ports: list[int] = field(default_factory=list)
+    blocked_modules: list[str] = field(default_factory=list)
 
     # ── approval gates ────────────────────────────────────────────────────────
-    require_approval_for  : list[str] = field(
-        default_factory=lambda: ["EXPLOIT", "POST_EXPLOIT"]
-    )
+    require_approval_for: list[str] = field(default_factory=lambda: ["EXPLOIT", "POST_EXPLOIT"])
 
     # ── limits ────────────────────────────────────────────────────────────────
-    max_runtime_minutes   : int  = 120
-    max_threads           : int  = 1
+    max_runtime_minutes: int = 120
+    max_threads: int = 1
 
     # ── kill switch ───────────────────────────────────────────────────────────
-    kill_switch           : bool = False
+    kill_switch: bool = False
 
     # ── runtime tracking (not serialised) ────────────────────────────────────
-    _start_time           : Optional[float] = field(
-        default=None, init=False, repr=False
-    )
+    _start_time: float | None = field(default=None, init=False, repr=False)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -115,13 +109,13 @@ class RulesOfEngagement:
 
     def to_dict(self) -> dict:
         return {
-            "allowed_targets"     : self.allowed_targets,
-            "blocked_ports"       : self.blocked_ports,
-            "blocked_modules"     : self.blocked_modules,
+            "allowed_targets": self.allowed_targets,
+            "blocked_ports": self.blocked_ports,
+            "blocked_modules": self.blocked_modules,
             "require_approval_for": self.require_approval_for,
-            "max_runtime_minutes" : self.max_runtime_minutes,
-            "max_threads"         : self.max_threads,
-            "kill_switch"         : self.kill_switch,
+            "max_runtime_minutes": self.max_runtime_minutes,
+            "max_threads": self.max_threads,
+            "kill_switch": self.kill_switch,
         }
 
     @classmethod
@@ -134,9 +128,7 @@ class RulesOfEngagement:
         if "blocked_modules" in data:
             roe.blocked_modules = [str(m) for m in data["blocked_modules"]]
         if "require_approval_for" in data:
-            roe.require_approval_for = [
-                str(p) for p in data["require_approval_for"]
-            ]
+            roe.require_approval_for = [str(p) for p in data["require_approval_for"]]
         if "max_runtime_minutes" in data:
             roe.max_runtime_minutes = int(data["max_runtime_minutes"])
         if "max_threads" in data:
@@ -149,13 +141,13 @@ class RulesOfEngagement:
     def permissive(cls) -> "RulesOfEngagement":
         """Default ROE — allows all, no approval gates, 2-hour limit."""
         return cls(
-            allowed_targets      = ["*"],
-            blocked_ports        = [],
-            blocked_modules      = [],
-            require_approval_for = [],
-            max_runtime_minutes  = 120,
-            max_threads          = 1,
-            kill_switch          = False,
+            allowed_targets=["*"],
+            blocked_ports=[],
+            blocked_modules=[],
+            require_approval_for=[],
+            max_runtime_minutes=120,
+            max_threads=1,
+            kill_switch=False,
         )
 
     # ── display ───────────────────────────────────────────────────────────────
@@ -171,9 +163,7 @@ class RulesOfEngagement:
         if self.blocked_modules:
             parts.append(f"blocked modules: {len(self.blocked_modules)}")
         if self.require_approval_for:
-            parts.append(
-                f"approval required: {', '.join(self.require_approval_for)}"
-            )
+            parts.append(f"approval required: {', '.join(self.require_approval_for)}")
         parts.append(f"max runtime: {self.max_runtime_minutes}m")
         if self.kill_switch:
             parts.append("⚠ KILL SWITCH ACTIVE")

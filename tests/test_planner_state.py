@@ -1,7 +1,8 @@
 """Tests for PlannerState and PhaseResult."""
-import time
+
 import pytest
-from hydrasight.models.planner_state import PlannerState, PhaseResult
+
+from hydrasight.models.planner_state import PhaseResult, PlannerState
 
 
 @pytest.fixture
@@ -133,12 +134,12 @@ class TestPortTracking:
 class TestSummary:
     def test_summary_keys(self, state):
         summary = state.summary()
-        assert "elapsed_minutes"   in summary
-        assert "phases_attempted"  in summary
-        assert "phases_succeeded"  in summary
-        assert "phases_failed"     in summary
-        assert "working_tools"     in summary
-        assert "empty_tools"       in summary
+        assert "elapsed_minutes" in summary
+        assert "phases_attempted" in summary
+        assert "phases_succeeded" in summary
+        assert "phases_failed" in summary
+        assert "working_tools" in summary
+        assert "empty_tools" in summary
 
     def test_summary_counts(self, state):
         state.record_phase("RECON", True)
@@ -146,7 +147,7 @@ class TestSummary:
         summary = state.summary()
         assert summary["phases_attempted"] == 2
         assert summary["phases_succeeded"] == 1
-        assert summary["phases_failed"]    == 1
+        assert summary["phases_failed"] == 1
 
     def test_elapsed_minutes_positive(self, state):
         assert state.elapsed_minutes() >= 0.0
@@ -155,15 +156,15 @@ class TestSummary:
 class TestPhaseResultDataclass:
     def test_phase_result_fields(self):
         r = PhaseResult(
-            phase_id     = "RECON",
-            success      = True,
-            reason       = "found 5 ports",
-            tools_used   = ["nmap_scan"],
-            bytes_returned = 4096,
+            phase_id="RECON",
+            success=True,
+            reason="found 5 ports",
+            tools_used=["nmap_scan"],
+            bytes_returned=4096,
         )
-        assert r.phase_id      == "RECON"
-        assert r.success       is True
-        assert r.tools_used    == ["nmap_scan"]
+        assert r.phase_id == "RECON"
+        assert r.success is True
+        assert r.tools_used == ["nmap_scan"]
         assert r.bytes_returned == 4096
 
     def test_phase_result_timestamp_set(self):

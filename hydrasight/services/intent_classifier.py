@@ -23,38 +23,38 @@ Each classification result includes:
                 dir_enum | autopwn | None)
   - requires_confirmation (bool, based on mode + confidence)
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum, auto
-from typing import Optional
+from enum import Enum
 
 
 class Intent(Enum):
-    CHAT           = "chat"
-    EXPLAIN        = "explain"
-    CLARIFY        = "clarify"
+    CHAT = "chat"
+    EXPLAIN = "explain"
+    CLARIFY = "clarify"
     SUGGEST_ACTION = "suggest_action"
     EXECUTE_ACTION = "execute_action"
-    PLAN           = "plan"
+    PLAN = "plan"
     # Operational meta-intents — routed to internal HydraSight commands
-    EXECUTE_PLAN   = "execute_plan"    # "do all planned stuff", "run the plan"
-    VERIFY_FINDINGS= "verify_findings" # "verify findings", "verify vulns"
-    SHOW_SUGGESTIONS = "show_suggestions" # "suggest next step", "what next"
-    SHOW_CONCLUSION  = "show_conclusion"  # "conclusion", "summarize outcome"
+    EXECUTE_PLAN = "execute_plan"  # "do all planned stuff", "run the plan"
+    VERIFY_FINDINGS = "verify_findings"  # "verify findings", "verify vulns"
+    SHOW_SUGGESTIONS = "show_suggestions"  # "suggest next step", "what next"
+    SHOW_CONCLUSION = "show_conclusion"  # "conclusion", "summarize outcome"
 
 
 @dataclass
 class IntentResult:
-    intent       : Intent
-    confidence   : float                    # 0.0 – 1.0
-    extracted_ip : Optional[str]   = None
-    extracted_ports: Optional[str] = None  # e.g. "1-500", "80,443", "all"
-    extracted_flags: list[str]     = field(default_factory=list)
-    tool_hint    : Optional[str]   = None  # nmap_scan, smb_check, …
-    summary      : str             = ""    # human-readable one-liner
-    clarify_question: Optional[str] = None
+    intent: Intent
+    confidence: float  # 0.0 – 1.0
+    extracted_ip: str | None = None
+    extracted_ports: str | None = None  # e.g. "1-500", "80,443", "all"
+    extracted_flags: list[str] = field(default_factory=list)
+    tool_hint: str | None = None  # nmap_scan, smb_check, …
+    summary: str = ""  # human-readable one-liner
+    clarify_question: str | None = None
 
     @property
     def has_target(self) -> bool:
@@ -62,9 +62,7 @@ class IntentResult:
 
     @property
     def is_operational(self) -> bool:
-        return self.intent in (
-            Intent.EXECUTE_ACTION, Intent.SUGGEST_ACTION, Intent.CLARIFY
-        )
+        return self.intent in (Intent.EXECUTE_ACTION, Intent.SUGGEST_ACTION, Intent.CLARIFY)
 
     @property
     def is_safe(self) -> bool:
@@ -74,9 +72,7 @@ class IntentResult:
 
 # ── regex helpers ─────────────────────────────────────────────────────────────
 
-_IP_RE = re.compile(
-    r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b"
-)
+_IP_RE = re.compile(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b")
 _PORT_RANGE_RE = re.compile(
     r"\b(?:ports?\s+)?"
     r"(\d{1,5})\s*(?:to|-)\s*(\d{1,5})\b",
@@ -88,46 +84,104 @@ _PORT_LIST_RE = re.compile(
 )
 _FLAG_RE = re.compile(r"\B(-s[SAUVFXNP]|-[OopPnA]|-p(?:\s+\S+)?)\b")
 _NMAP_FLAG_WORDS = {
-    "syn"        : "-sS",
-    "syn scan"   : "-sS",
-    "stealth"    : "-sS",
-    "version"    : "-sV",
+    "syn": "-sS",
+    "syn scan": "-sS",
+    "stealth": "-sS",
+    "version": "-sV",
     "version detect": "-sV",
-    "os detect"  : "-O",
+    "os detect": "-O",
     "os detection": "-O",
-    "os"         : "-O",
-    "aggressive" : "-A",
-    "udp"        : "-sU",
-    "no ping"    : "-Pn",
-    "fast"       : "-T4",
+    "os": "-O",
+    "aggressive": "-A",
+    "udp": "-sU",
+    "no ping": "-Pn",
+    "fast": "-T4",
 }
 
 
 # ── explain keyword sets ──────────────────────────────────────────────────────
 
-_EXPLAIN_TRIGGERS = frozenset({
-    "what is", "what are", "explain", "describe", "define", "tell me about",
-    "how does", "how do", "why does", "why did", "why is", "why are",
-    "what does", "what do", "what happened", "help me understand",
-    "difference between", "compare", "meaning of", "definition",
-    "how should i", "how can i", "what should i", "what would you recommend",
-    "what are the implications", "what does it mean", "what does port",
-    "should i", "is port", "what is the risk", "tell me",
-    "can you explain", "could you explain",
-})
+_EXPLAIN_TRIGGERS = frozenset(
+    {
+        "what is",
+        "what are",
+        "explain",
+        "describe",
+        "define",
+        "tell me about",
+        "how does",
+        "how do",
+        "why does",
+        "why did",
+        "why is",
+        "why are",
+        "what does",
+        "what do",
+        "what happened",
+        "help me understand",
+        "difference between",
+        "compare",
+        "meaning of",
+        "definition",
+        "how should i",
+        "how can i",
+        "what should i",
+        "what would you recommend",
+        "what are the implications",
+        "what does it mean",
+        "what does port",
+        "should i",
+        "is port",
+        "what is the risk",
+        "tell me",
+        "can you explain",
+        "could you explain",
+    }
+)
 
-_CHAT_TRIGGERS = frozenset({
-    "hey", "hi", "hello", "yo", "sup", "good morning", "good evening",
-    "good afternoon", "thanks", "thank you", "cheers", "bye", "goodbye",
-    "ok", "okay", "sure", "cool", "nice", "great", "awesome",
-    "how are you", "who are you", "what are you", "what can you do",
-})
+_CHAT_TRIGGERS = frozenset(
+    {
+        "hey",
+        "hi",
+        "hello",
+        "yo",
+        "sup",
+        "good morning",
+        "good evening",
+        "good afternoon",
+        "thanks",
+        "thank you",
+        "cheers",
+        "bye",
+        "goodbye",
+        "ok",
+        "okay",
+        "sure",
+        "cool",
+        "nice",
+        "great",
+        "awesome",
+        "how are you",
+        "who are you",
+        "what are you",
+        "what can you do",
+    }
+)
 
-_PLAN_TRIGGERS = frozenset({
-    "plan", "show plan", "dry run", "dry-run", "engagement plan",
-    "what would you do", "what would hydrasight do", "roadmap",
-    "show roadmap", "engagement roadmap",
-})
+_PLAN_TRIGGERS = frozenset(
+    {
+        "plan",
+        "show plan",
+        "dry run",
+        "dry-run",
+        "engagement plan",
+        "what would you do",
+        "what would hydrasight do",
+        "roadmap",
+        "show roadmap",
+        "engagement roadmap",
+    }
+)
 
 # ── Operational meta-intent patterns (checked BEFORE tool/scan patterns) ──────
 
@@ -195,12 +249,17 @@ _SCAN_WORDS = re.compile(
 )
 _SMB_ENUM_WORDS = re.compile(r"\b(share|shares|enum|enumerate|netbios|enum4linux)\b", re.IGNORECASE)
 _SMBCLIENT_WORDS = re.compile(r"\bsmbclient\b", re.IGNORECASE)
-_SMB_WORDS  = re.compile(r"\b(smb|samba|port\s*445|ms17|eternalblue)\b", re.IGNORECASE)
-_FTP_WORDS  = re.compile(r"\b(ftp|file\s*transfer|port\s*21)\b", re.IGNORECASE)
-_SSH_WORDS  = re.compile(r"\b(ssh|secure\s*shell|port\s*22)\b", re.IGNORECASE)
-_WEB_WORDS  = re.compile(r"\b(web|http|https|dir|directory|gobuster|nikto|port\s*80|port\s*443|port\s*8080)\b", re.IGNORECASE)
+_SMB_WORDS = re.compile(r"\b(smb|samba|port\s*445|ms17|eternalblue)\b", re.IGNORECASE)
+_FTP_WORDS = re.compile(r"\b(ftp|file\s*transfer|port\s*21)\b", re.IGNORECASE)
+_SSH_WORDS = re.compile(r"\b(ssh|secure\s*shell|port\s*22)\b", re.IGNORECASE)
+_WEB_WORDS = re.compile(
+    r"\b(web|http|https|dir|directory|gobuster|nikto|port\s*80|port\s*443|port\s*8080)\b",
+    re.IGNORECASE,
+)
 _VULN_WORDS = re.compile(r"\b(vuln|vulnerabilit|cve|exploit|metasploit)\b", re.IGNORECASE)
-_PWND_WORDS = re.compile(r"\b(autopwn|exploit\s+host|full\s+engagement|compromise|pwn)\b", re.IGNORECASE)
+_PWND_WORDS = re.compile(
+    r"\b(autopwn|exploit\s+host|full\s+engagement|compromise|pwn)\b", re.IGNORECASE
+)
 
 # Ambiguous without IP or clear target reference
 _AMBIGUOUS_RE = re.compile(
@@ -211,12 +270,12 @@ _AMBIGUOUS_RE = re.compile(
 )
 
 
-def _extract_ip(text: str) -> Optional[str]:
+def _extract_ip(text: str) -> str | None:
     m = _IP_RE.search(text)
     return m.group(1) if m else None
 
 
-def _extract_ports(text: str) -> Optional[str]:
+def _extract_ports(text: str) -> str | None:
     # Try range first
     m = _PORT_RANGE_RE.search(text)
     if m:
@@ -247,13 +306,18 @@ def _extract_flags(text: str) -> list[str]:
     return flags
 
 
-def _tool_hint(text: str) -> Optional[str]:
-    if _PWND_WORDS.search(text):      return "autopwn"
+
+
+def _tool_hint(text: str) -> str | None:
+    if _PWND_WORDS.search(text):
+        return "autopwn"
 
     # ── SMB: check for enumeration BEFORE generic vuln/smb check ─────────────
     # Priority: smbclient > share/list enumeration > generic smb_check
-    if _SMBCLIENT_WORDS.search(text): return "smbclient_enum"
-    if _SMB_SHARE_ENUM_RE.search(text): return "smb_enum"
+    if _SMBCLIENT_WORDS.search(text):
+        return "smbclient_enum"
+    if _SMB_SHARE_ENUM_RE.search(text):
+        return "smb_enum"
 
     has_smb = bool(_SMB_WORDS.search(text))
     has_smb_enum = bool(_SMB_ENUM_WORDS.search(text))
@@ -265,12 +329,17 @@ def _tool_hint(text: str) -> Optional[str]:
         return "smb_check"
 
     # ── generic vuln scan (after SMB so 'smb vuln scan' doesn't drift) ────────
-    if _VULN_WORDS.search(text):      return "vuln_scan"
+    if _VULN_WORDS.search(text):
+        return "vuln_scan"
 
-    if _FTP_WORDS.search(text):    return "ftp_check"
-    if _SSH_WORDS.search(text):    return "ssh_check"
-    if _WEB_WORDS.search(text):    return "dir_enum"
-    if _SCAN_WORDS.search(text):   return "nmap_scan"
+    if _FTP_WORDS.search(text):
+        return "ftp_check"
+    if _SSH_WORDS.search(text):
+        return "ssh_check"
+    if _WEB_WORDS.search(text):
+        return "dir_enum"
+    if _SCAN_WORDS.search(text):
+        return "nmap_scan"
     return None
 
 
@@ -298,73 +367,79 @@ class IntentClassifier:
 
         # ── 0. Empty ──────────────────────────────────────────────────────────
         if not text:
-            return IntentResult(
-                intent=Intent.CHAT, confidence=1.0, summary="empty input"
-            )
+            return IntentResult(intent=Intent.CHAT, confidence=1.0, summary="empty input")
 
         # ── 0.5. Guardrail for 'run command:' ─────────────────────────────────
         if lower.startswith("run command:"):
             hint = _tool_hint(text)
             if not hint:
                 return IntentResult(
-                    intent=Intent.CLARIFY, confidence=1.0,
+                    intent=Intent.CLARIFY,
+                    confidence=1.0,
                     clarify_question=(
                         "To actually execute commands, use `/run <action>` or a supported "
                         "security action such as SMB enumeration. I can propose and run "
                         "`enum4linux -S` or `smbclient` for you."
                     ),
-                    summary="guardrail against arbitrary run command"
+                    summary="guardrail against arbitrary run command",
                 )
 
         # ── 1. Operational meta-intents (checked before plan/chat/explain) ─────
         # These map to internal HydraSight commands, not generic chat.
         if _EXECUTE_PLAN_RE.search(text):
             return IntentResult(
-                intent=Intent.EXECUTE_PLAN, confidence=1.0,
+                intent=Intent.EXECUTE_PLAN,
+                confidence=1.0,
                 summary="operator requests execution of planned engagement",
             )
         if _VERIFY_FINDINGS_RE.search(text):
             return IntentResult(
-                intent=Intent.VERIFY_FINDINGS, confidence=1.0,
+                intent=Intent.VERIFY_FINDINGS,
+                confidence=1.0,
                 summary="operator requests verification of findings",
             )
         if _SHOW_SUGGESTIONS_RE.search(text):
             return IntentResult(
-                intent=Intent.SHOW_SUGGESTIONS, confidence=1.0,
+                intent=Intent.SHOW_SUGGESTIONS,
+                confidence=1.0,
                 summary="operator requests next-step suggestions",
             )
         if _SHOW_CONCLUSION_RE.match(text):
             return IntentResult(
-                intent=Intent.SHOW_CONCLUSION, confidence=1.0,
+                intent=Intent.SHOW_CONCLUSION,
+                confidence=1.0,
                 summary="operator requests engagement conclusion summary",
             )
 
         # ── 2. Plan ───────────────────────────────────────────────────────────
         if _starts_with_any(text, _PLAN_TRIGGERS):
             return IntentResult(
-                intent=Intent.PLAN, confidence=1.0,
+                intent=Intent.PLAN,
+                confidence=1.0,
                 summary="engagement plan (dry run)",
             )
 
         # ── 2. Chat (small talk) ──────────────────────────────────────────────
         if _starts_with_any(text, _CHAT_TRIGGERS) and len(text.split()) <= 6:
             return IntentResult(
-                intent=Intent.CHAT, confidence=0.95,
+                intent=Intent.CHAT,
+                confidence=0.95,
                 summary="conversational input",
             )
 
         # ── 3. Explanation / knowledge ────────────────────────────────────────
         if _starts_with_any(text, _EXPLAIN_TRIGGERS):
             return IntentResult(
-                intent=Intent.EXPLAIN, confidence=0.90,
+                intent=Intent.EXPLAIN,
+                confidence=0.90,
                 summary="knowledge / explanation request",
             )
 
         # ── 4. Extract operational context ────────────────────────────────────
-        ip    = _extract_ip(text)
+        ip = _extract_ip(text)
         ports = _extract_ports(text)
         flags = _extract_flags(text)
-        hint  = _tool_hint(text)
+        hint = _tool_hint(text)
 
         # ── 5. Ambiguous (known ambiguous pattern, no IP) ─────────────────────
         if _AMBIGUOUS_RE.match(text):
@@ -376,8 +451,10 @@ class IntentClassifier:
                 "Please clarify."
             )
             return IntentResult(
-                intent=Intent.CLARIFY, confidence=0.85,
-                extracted_ip=ip, tool_hint=hint,
+                intent=Intent.CLARIFY,
+                confidence=0.85,
+                extracted_ip=ip,
+                tool_hint=hint,
                 clarify_question=question,
                 summary="ambiguous request — needs clarification",
             )
@@ -431,7 +508,7 @@ class IntentClassifier:
             # Has a tool keyword but no target — suggest rather than execute
             q = (
                 f"Do you want me to:\n"
-                f"  1. Explain {hint.replace('_', ' ')}\n"
+                f"  1. Explain {str(hint).replace('_', ' ')}\n"
                 f"  2. Suggest how to use it\n"
                 f"  3. Execute it against a target (please provide an IP)\n"
                 f"Which do you prefer?"
@@ -461,12 +538,14 @@ class IntentClassifier:
             lower.startswith(w) for w in ("why", "how", "what", "when", "which", "who")
         ):
             return IntentResult(
-                intent=Intent.EXPLAIN, confidence=0.75,
+                intent=Intent.EXPLAIN,
+                confidence=0.75,
                 summary="question — explanation expected",
             )
 
         # ── 10. Default → CHAT ────────────────────────────────────────────────
         return IntentResult(
-            intent=Intent.CHAT, confidence=0.60,
+            intent=Intent.CHAT,
+            confidence=0.60,
             summary="unrecognised — treating as chat",
         )

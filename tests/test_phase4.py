@@ -1,26 +1,26 @@
 """Phase 4 tests — EngagementPlanner (dry-run), FTPAccessHandler, WebAdminHandler."""
+
 import logging
-import pytest
 from unittest.mock import MagicMock
 
-from hydrasight.core.planner import (
-    EngagementPlanner,
-    EngagementPlan,
-    EngagementBranch,
-    PlanItem,
-)
-from hydrasight.models.findings      import Findings
-from hydrasight.models.roe           import RulesOfEngagement
-from hydrasight.models.planner_state import PlannerState
-from hydrasight.services.post_access import (
-    FTPAccessHandler,
-    WebAdminHandler,
-    PostAccessResult,
-    AccessType,
-)
+import pytest
 
+from hydrasight.core.planner import (
+    EngagementBranch,
+    EngagementPlanner,
+)
+from hydrasight.models.findings import Findings
+from hydrasight.models.planner_state import PlannerState
+from hydrasight.models.roe import RulesOfEngagement
+from hydrasight.services.post_access import (
+    AccessType,
+    FTPAccessHandler,
+    PostAccessResult,
+    WebAdminHandler,
+)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def log() -> logging.Logger:
@@ -50,6 +50,7 @@ def _findings_with_ports(*specs) -> Findings:
 
 # ── EngagementPlanner — empty findings ────────────────────────────────────────
 
+
 class TestPlannerEmpty:
     def test_empty_findings_produces_recon_branch(self, permissive_roe):
         f = Findings()
@@ -76,6 +77,7 @@ class TestPlannerEmpty:
 
 # ── EngagementPlanner — service detection ─────────────────────────────────────
 
+
 class TestPlannerServiceDetection:
     def test_smb_service_adds_smb_check(self, permissive_roe):
         f = _findings_with_ports((445, "smb", ""))
@@ -100,8 +102,8 @@ class TestPlannerServiceDetection:
         plan = EngagementPlanner.build(f, permissive_roe)
         phase_ids = [p.phase_id for p in plan.phases]
         assert "WEB_FINGER" in phase_ids
-        assert "WEB_DIR"    in phase_ids
-        assert "WEB_VULN"   in phase_ids
+        assert "WEB_DIR" in phase_ids
+        assert "WEB_VULN" in phase_ids
 
     def test_vuln_scan_always_present(self, permissive_roe):
         f = _findings_with_ports((22, "ssh", ""))
@@ -110,6 +112,7 @@ class TestPlannerServiceDetection:
 
 
 # ── EngagementPlanner — branch selection ──────────────────────────────────────
+
 
 class TestPlannerBranch:
     def test_credential_led_when_creds_present(self, permissive_roe):
@@ -120,8 +123,7 @@ class TestPlannerBranch:
 
     def test_exploit_led_when_vulns_suggest_exploits(self, permissive_roe):
         f = _findings_with_ports((445, "smb", ""))
-        f.add_vuln(name="MS17-010 EternalBlue", severity="CRITICAL",
-                   description="test")
+        f.add_vuln(name="MS17-010 EternalBlue", severity="CRITICAL", description="test")
         plan = EngagementPlanner.build(f, permissive_roe)
         assert plan.branch == EngagementBranch.EXPLOIT_LED
 
@@ -129,9 +131,7 @@ class TestPlannerBranch:
         f = _findings_with_ports((80, "http", "apache"))
         plan = EngagementPlanner.build(f, permissive_roe)
         # apache alone has no exploit suggestion, so web-led
-        assert plan.branch in (
-            EngagementBranch.WEB_LED, EngagementBranch.RECON_ONLY
-        )
+        assert plan.branch in (EngagementBranch.WEB_LED, EngagementBranch.RECON_ONLY)
 
     def test_validation_when_vulns_no_exploits(self, permissive_roe):
         # Port 22 with no matching version produces a brute-force suggestion,
@@ -151,8 +151,7 @@ class TestPlannerBranch:
 
     def test_exploit_phases_added_for_exploit_led(self, permissive_roe):
         f = _findings_with_ports((445, "smb", ""))
-        f.add_vuln(name="MS17-010 EternalBlue", severity="CRITICAL",
-                   description="rce")
+        f.add_vuln(name="MS17-010 EternalBlue", severity="CRITICAL", description="rce")
         plan = EngagementPlanner.build(f, permissive_roe)
         phase_ids = [p.phase_id for p in plan.phases]
         if plan.branch == EngagementBranch.EXPLOIT_LED:
@@ -169,6 +168,7 @@ class TestPlannerBranch:
 
 
 # ── EngagementPlanner — ROE enforcement ───────────────────────────────────────
+
 
 class TestPlannerROE:
     def test_kill_switch_blocks_all_phases(self):
@@ -191,9 +191,7 @@ class TestPlannerROE:
         f = _findings_with_ports((445, "smb", ""))
         f.add_vuln(name="MS17-010 EternalBlue", severity="CRITICAL", description="")
         plan = EngagementPlanner.build(f, roe)
-        exploit_phase = next(
-            (p for p in plan.phases if p.phase_id == "EXPLOIT"), None
-        )
+        exploit_phase = next((p for p in plan.phases if p.phase_id == "EXPLOIT"), None)
         if exploit_phase:
             assert exploit_phase.gated
 
@@ -214,6 +212,7 @@ class TestPlannerROE:
 
 # ── EngagementPlan properties ─────────────────────────────────────────────────
 
+
 class TestEngagementPlanProperties:
     def test_actionable_phases_excludes_blocked(self):
         roe = RulesOfEngagement.permissive()
@@ -229,10 +228,11 @@ class TestEngagementPlanProperties:
         plan = EngagementPlanner.build(f, roe)
         lines = plan.summary_lines()
         assert len(lines) >= 2
-        assert any("branch" in l for l in lines)
+        assert any("branch" in line for line in lines)
 
     def test_manual_suggestions_are_manual_check_mode(self):
         from hydrasight.integrations.exploit_suggestion import ExecutionMode
+
         roe = RulesOfEngagement.permissive()
         f = _findings_with_ports((80, "http", ""))
         plan = EngagementPlanner.build(f, roe)
@@ -247,14 +247,13 @@ class TestEngagementPlanProperties:
         for _ in range(10):
             state.record_phase("SSH_CHECK", False, "no output")
         plan = EngagementPlanner.build(f, roe, planner_state=state)
-        ssh_phase = next(
-            (p for p in plan.phases if p.phase_id == "SSH_CHECK"), None
-        )
+        ssh_phase = next((p for p in plan.phases if p.phase_id == "SSH_CHECK"), None)
         if ssh_phase:
             assert ssh_phase.blocked
 
 
 # ── FTPAccessHandler ──────────────────────────────────────────────────────────
+
 
 class TestFTPAccessHandler:
     def test_no_credentials_returns_failure(self, log, mock_dispatcher):
@@ -295,8 +294,8 @@ class TestFTPAccessHandler:
         passwd_content = "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000::/home/user:/bin/bash"
         calls = [
             ("run_command", "drwxr-xr-x listing content", 0.5),  # root listing
-            ("run_command", passwd_content, 0.5),                 # /etc/passwd
-            ("run_command", "", 0.5),                             # /etc/shadow (no access)
+            ("run_command", passwd_content, 0.5),  # /etc/passwd
+            ("run_command", "", 0.5),  # /etc/shadow (no access)
             ("run_command", "", 0.5),
             ("run_command", "", 0.5),
             ("run_command", "", 0.5),
@@ -328,6 +327,7 @@ class TestFTPAccessHandler:
 
 # ── WebAdminHandler ───────────────────────────────────────────────────────────
 
+
 class TestWebAdminHandler:
     def test_no_credentials_returns_failure(self, log, mock_dispatcher):
         h = WebAdminHandler(log, {})
@@ -351,10 +351,10 @@ class TestWebAdminHandler:
     def test_phpmyadmin_success_detected(self, log):
         responses = [
             ("run_command", "<title>phpMyAdmin - admin dashboard</title>", 0.5),  # phpmyadmin
-            ("run_command", "<html>login</html>", 0.5),    # wp
-            ("run_command", "<html>login</html>", 0.5),    # roundcube
-            ("run_command", "401", 0.5),                   # tomcat
-            ("run_command", "", 0.5),                      # cookie cleanup
+            ("run_command", "<html>login</html>", 0.5),  # wp
+            ("run_command", "<html>login</html>", 0.5),  # roundcube
+            ("run_command", "401", 0.5),  # tomcat
+            ("run_command", "", 0.5),  # cookie cleanup
         ]
         d = MagicMock()
         d.dispatch.side_effect = responses
@@ -370,10 +370,10 @@ class TestWebAdminHandler:
         # Tomcat gets 200 basic-auth response
         responses = [
             ("run_command", "<html>Welcome to Apache</html>", 0.5),  # phpmyadmin - no match
-            ("run_command", "<html>Blog site</html>", 0.5),           # wp - no match
-            ("run_command", "<html>Email client</html>", 0.5),        # roundcube - no match
-            ("run_command", "200", 0.5),                               # tomcat 200
-            ("run_command", "", 0.5),                                  # cleanup
+            ("run_command", "<html>Blog site</html>", 0.5),  # wp - no match
+            ("run_command", "<html>Email client</html>", 0.5),  # roundcube - no match
+            ("run_command", "200", 0.5),  # tomcat 200
+            ("run_command", "", 0.5),  # cleanup
         ]
         d = MagicMock()
         d.dispatch.side_effect = responses
@@ -385,10 +385,12 @@ class TestWebAdminHandler:
 
     def test_https_scheme_used_for_443(self, log):
         cmds_issued = []
+
         def capture(call):
             if isinstance(call, dict) and call.get("args"):
                 cmds_issued.append(call["args"].get("command", ""))
             return ("run_command", "", 0.5)
+
         d = MagicMock()
         d.dispatch.side_effect = capture
         session = {"username": "admin", "password": "pass", "rport": 443}
@@ -407,18 +409,20 @@ class TestWebAdminHandler:
 
     def test_factory_selects_web_admin_for_http_payload(self, log):
         from hydrasight.services.post_access import PostAccessHandler
+
         session = {"payload": "http", "username": "a", "password": "b"}
         h = PostAccessHandler.for_session(session, log)
         assert isinstance(h, WebAdminHandler)
 
     def test_factory_selects_ftp_for_ftp_payload(self, log):
         from hydrasight.services.post_access import PostAccessHandler
+
         session = {"payload": "ftp", "username": "a", "password": "b"}
         h = PostAccessHandler.for_session(session, log)
         assert isinstance(h, FTPAccessHandler)
 
     def test_profiles_have_required_keys(self):
         for p in WebAdminHandler._PROFILES:
-            assert "path"        in p
+            assert "path" in p
             assert "success_str" in p
-            assert "label"       in p
+            assert "label" in p

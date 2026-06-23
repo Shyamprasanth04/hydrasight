@@ -1,9 +1,8 @@
 """
 Tests for Parser — validates regex extraction against real tool output samples.
 """
-import pytest
-from hydrasight.parsers import Parser
 
+from hydrasight.parsers import Parser
 
 # ── nmap output samples ───────────────────────────────────────────────────────
 
@@ -84,6 +83,7 @@ CVE_OUTPUT = """\
 
 # ── port parsing ──────────────────────────────────────────────────────────────
 
+
 class TestPortParser:
     def test_basic_port_extraction(self):
         ports = Parser.ports(NMAP_BASIC)
@@ -128,6 +128,7 @@ class TestPortParser:
 
 # ── directory parsing ─────────────────────────────────────────────────────────
 
+
 class TestDirParser:
     def test_extracts_paths(self):
         dirs = Parser.dirs(GOBUSTER_OUTPUT)
@@ -151,6 +152,7 @@ class TestDirParser:
 
 # ── CVE parsing ───────────────────────────────────────────────────────────────
 
+
 class TestCVEParser:
     def test_extracts_cves(self):
         cves = Parser.cves(CVE_OUTPUT)
@@ -172,6 +174,7 @@ class TestCVEParser:
 
 # ── MS17 / anon FTP detection ─────────────────────────────────────────────────
 
+
 class TestBooleanDetectors:
     def test_is_ms17_positive(self):
         assert Parser.is_ms17(NMAP_VULN) is True
@@ -187,6 +190,7 @@ class TestBooleanDetectors:
 
 
 # ── hash parsing ──────────────────────────────────────────────────────────────
+
 
 class TestHashParser:
     def test_extracts_hashes(self):
@@ -216,6 +220,7 @@ class TestHashParser:
 
 # ── hydra credential parsing ──────────────────────────────────────────────────
 
+
 class TestHydraCredParser:
     def test_extracts_creds(self):
         creds = Parser.hydra_creds(HYDRA_OUTPUT)
@@ -238,6 +243,7 @@ class TestHydraCredParser:
 
 # ── OS info parsing ───────────────────────────────────────────────────────────
 
+
 class TestOSParser:
     def test_extracts_os(self):
         os = Parser.os_info(NMAP_OS)
@@ -249,6 +255,7 @@ class TestOSParser:
 
 
 # ── validation ────────────────────────────────────────────────────────────────
+
 
 class TestValidate:
     def test_empty_output_warning(self):

@@ -1,7 +1,7 @@
 {
   "ollama_url":      "http://localhost:11434",
-  "kali_api_url":    "http://<KALI-VM-IP>:<PORT>",
-  "model":           "qwen2.5:7b",
+  "kali_api_url":    "http://192.168.100.10:5000",
+  "model":           "qcwind/qwen3-8b-instruct-Q4-K-M:latest",
   "context_size":    8192,
   "max_retries":     3,
   "retry_delay":     2.0,
@@ -16,5 +16,22 @@
   "deep_scan_range": "1-65535",
   "wordlist":        "/usr/share/wordlists/dirb/common.txt",
   "rockyou_path":    "/usr/share/wordlists/rockyou.txt",
-  "execution_mode":  "confirm"
+  "execution_mode":  "confirm",
+  "ollama_options_orchestrator": {
+    "temperature": 0.15,
+    "top_p": 0.85,
+    "top_k": 40,
+    "repeat_penalty": 1.08,
+    "num_ctx": 8192,
+    "num_predict": 2000,
+    "think": false
+  },
+  "ollama_options_chat": {
+    "temperature": 0.35,
+    "top_p": 0.9,
+    "top_k": 50,
+    "repeat_penalty": 1.05,
+    "num_ctx": 8192,
+    "num_predict": 3000
+  }
 }

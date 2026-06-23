@@ -1,29 +1,31 @@
 """Tests for FindingRecord and FindingSeverity."""
+
 import pytest
+
 from hydrasight.models.finding_record import FindingRecord, FindingSeverity
 
 
 @pytest.fixture
 def basic() -> FindingRecord:
     return FindingRecord(
-        name        = "MS17-010 EternalBlue",
-        severity    = FindingSeverity.CRITICAL,
-        description = "SMBv1 unauthenticated RCE",
-        cve         = "CVE-2017-0144",
-        port        = 445,
+        name="MS17-010 EternalBlue",
+        severity=FindingSeverity.CRITICAL,
+        description="SMBv1 unauthenticated RCE",
+        cve="CVE-2017-0144",
+        port=445,
     )
 
 
 class TestFindingSeverity:
     def test_rank_ordering(self):
         assert FindingSeverity.CRITICAL.rank < FindingSeverity.HIGH.rank
-        assert FindingSeverity.HIGH.rank    < FindingSeverity.MEDIUM.rank
-        assert FindingSeverity.MEDIUM.rank  < FindingSeverity.LOW.rank
-        assert FindingSeverity.LOW.rank     < FindingSeverity.INFO.rank
+        assert FindingSeverity.HIGH.rank < FindingSeverity.MEDIUM.rank
+        assert FindingSeverity.MEDIUM.rank < FindingSeverity.LOW.rank
+        assert FindingSeverity.LOW.rank < FindingSeverity.INFO.rank
 
     def test_from_str_valid(self):
         assert FindingSeverity.from_str("critical") == FindingSeverity.CRITICAL
-        assert FindingSeverity.from_str("HIGH")     == FindingSeverity.HIGH
+        assert FindingSeverity.from_str("HIGH") == FindingSeverity.HIGH
 
     def test_from_str_invalid_defaults_info(self):
         assert FindingSeverity.from_str("BOGUS") == FindingSeverity.INFO
@@ -151,26 +153,26 @@ class TestSerialisation:
         assert d["severity"] == "CRITICAL"
 
     def test_from_dict_roundtrip(self, basic):
-        d   = basic.to_dict()
+        d = basic.to_dict()
         rec = FindingRecord.from_dict(d)
-        assert rec.name       == basic.name
-        assert rec.severity   == basic.severity
-        assert rec.cve        == basic.cve
-        assert rec.port       == basic.port
+        assert rec.name == basic.name
+        assert rec.severity == basic.severity
+        assert rec.cve == basic.cve
+        assert rec.port == basic.port
         assert rec.confidence == basic.confidence
-        assert rec.verified   == basic.verified
+        assert rec.verified == basic.verified
 
     def test_from_vuln_dict(self):
         vuln = {
-            "name"       : "Anonymous FTP Access",
-            "severity"   : "MEDIUM",
+            "name": "Anonymous FTP Access",
+            "severity": "MEDIUM",
             "description": "Anon FTP allowed",
-            "cve"        : "",
-            "port"       : 21,
-            "ts"         : "2024-01-01 00:00:00",
+            "cve": "",
+            "port": 21,
+            "ts": "2024-01-01 00:00:00",
         }
         rec = FindingRecord.from_vuln_dict(vuln, phase="FTP_CHECK")
-        assert rec.name     == "Anonymous FTP Access"
+        assert rec.name == "Anonymous FTP Access"
         assert rec.severity == FindingSeverity.MEDIUM
-        assert rec.port     == 21
-        assert rec.phase    == "FTP_CHECK"
+        assert rec.port == 21
+        assert rec.phase == "FTP_CHECK"

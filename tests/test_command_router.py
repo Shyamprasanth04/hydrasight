@@ -10,18 +10,22 @@ Tests prove that:
   - JSON-looking conversational AI output is never parsed as a tool call
   - CommandRouter classifies all inputs correctly
 """
+
 import logging
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, call
 
-from hydrasight.services.command_router import (
-    CommandRouter, CommandRouter as CR, InputClass, BUILTIN_COMMANDS,
-)
-from hydrasight.services.intent_router import route_intent, is_conversational
 from hydrasight.config.defaults import CHAT_SYSTEM_PROMPT
-
+from hydrasight.services.command_router import (
+    BUILTIN_COMMANDS,
+    CommandRouter,
+    InputClass,
+)
+from hydrasight.services.intent_router import is_conversational, route_intent
 
 # ── CommandRouter tests ───────────────────────────────────────────────────────
+
 
 class TestCommandRouter:
     """Pure classification — no AI, no side effects."""
@@ -31,39 +35,43 @@ class TestCommandRouter:
         return CommandRouter()
 
     # chat inputs
-    @pytest.mark.parametrize("text", [
-        "hey",
-        "hello",
-        "what can you do",
-        "explain smb signing",
-        "why no ports found",
-        "how should I approach this target",
-        "summarize findings",
-        "what happened",
-        "yo",
-        "tell me about ms17-010",
-        "why did the last scan fail",
-        "is port 445 dangerous",
-        "what is meterpreter",
-        "what does CVE-2017-0144 mean",
-        "",            # empty → chat
-        "   ",         # whitespace → chat
-        "/unknowncommand foo",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "hey",
+            "hello",
+            "what can you do",
+            "explain smb signing",
+            "why no ports found",
+            "how should I approach this target",
+            "summarize findings",
+            "what happened",
+            "yo",
+            "tell me about ms17-010",
+            "why did the last scan fail",
+            "is port 445 dangerous",
+            "what is meterpreter",
+            "what does CVE-2017-0144 mean",
+            "",  # empty → chat
+            "   ",  # whitespace → chat
+            "/unknowncommand foo",
+        ],
+    )
     def test_bare_text_classified_as_chat(self, router, text):
         ci = router.classify(text)
-        assert ci.cls == InputClass.CHAT, (
-            f"'{text}' should be CHAT but got {ci.cls}"
-        )
+        assert ci.cls == InputClass.CHAT, f"'{text}' should be CHAT but got {ci.cls}"
         assert ci.is_safe is True
 
     # /ask inputs
-    @pytest.mark.parametrize("text,tail", [
-        ("/ask explain smb signing", "explain smb signing"),
-        ("/Ask what is ms17-010", "what is ms17-010"),
-        ("/ASK", ""),
-        ("/ask", ""),
-    ])
+    @pytest.mark.parametrize(
+        "text,tail",
+        [
+            ("/ask explain smb signing", "explain smb signing"),
+            ("/Ask what is ms17-010", "what is ms17-010"),
+            ("/ASK", ""),
+            ("/ask", ""),
+        ],
+    )
     def test_ask_prefix_classified_as_ask(self, router, text, tail):
         ci = router.classify(text)
         assert ci.cls == InputClass.ASK
@@ -71,11 +79,14 @@ class TestCommandRouter:
         assert ci.is_safe is True
 
     # /run inputs
-    @pytest.mark.parametrize("text,tail", [
-        ("/run check smb on 192.168.1.10", "check smb on 192.168.1.10"),
-        ("/Run vuln scan on 10.0.2.5",    "vuln scan on 10.0.2.5"),
-        ("/run",                           ""),
-    ])
+    @pytest.mark.parametrize(
+        "text,tail",
+        [
+            ("/run check smb on 192.168.1.10", "check smb on 192.168.1.10"),
+            ("/Run vuln scan on 10.0.2.5", "vuln scan on 10.0.2.5"),
+            ("/run", ""),
+        ],
+    )
     def test_run_prefix_classified_as_run(self, router, text, tail):
         ci = router.classify(text)
         assert ci.cls == InputClass.RUN
@@ -83,33 +94,34 @@ class TestCommandRouter:
         assert ci.is_safe is False
 
     # builtin commands
-    @pytest.mark.parametrize("text,cmd", [
-        ("autopwn 192.168.1.10",     "autopwn"),
-        ("scan 192.168.1.10",        "scan"),
-        ("plan",                     "plan"),
-        ("help",                     "help"),
-        ("findings",                 "findings"),
-        ("status",                   "status"),
-        ("clear",                    "clear"),
-        ("exit",                     "exit"),
-        ("quit",                     "quit"),
-        ("verbose 2",                "verbose"),
-        ("report 10.0.2.5",         "report"),
-        ("suggest",                  "suggest"),
-        ("conclusion",               "conclusion"),
-        ("roe",                      "roe"),
-        ("verify",                   "verify"),
-        ("ports",                    "ports"),
-        ("vulns",                    "vulns"),
-        ("creds",                    "creds"),
-        ("hashes",                   "hashes"),
-        ("sessions",                 "sessions"),
-    ])
+    @pytest.mark.parametrize(
+        "text,cmd",
+        [
+            ("autopwn 192.168.1.10", "autopwn"),
+            ("scan 192.168.1.10", "scan"),
+            ("plan", "plan"),
+            ("help", "help"),
+            ("findings", "findings"),
+            ("status", "status"),
+            ("clear", "clear"),
+            ("exit", "exit"),
+            ("quit", "quit"),
+            ("verbose 2", "verbose"),
+            ("report 10.0.2.5", "report"),
+            ("suggest", "suggest"),
+            ("conclusion", "conclusion"),
+            ("roe", "roe"),
+            ("verify", "verify"),
+            ("ports", "ports"),
+            ("vulns", "vulns"),
+            ("creds", "creds"),
+            ("hashes", "hashes"),
+            ("sessions", "sessions"),
+        ],
+    )
     def test_builtin_commands_classified_correctly(self, router, text, cmd):
         ci = router.classify(text)
-        assert ci.cls == InputClass.BUILTIN, (
-            f"'{text}' should be BUILTIN but got {ci.cls}"
-        )
+        assert ci.cls == InputClass.BUILTIN, f"'{text}' should be BUILTIN but got {ci.cls}"
         assert ci.command == cmd
 
     def test_plan_is_builtin_not_chat(self, router):
@@ -153,16 +165,17 @@ class TestCommandRouter:
         assert ci.cls == InputClass.CHAT
 
     def test_all_builtins_in_registry(self):
-        assert "autopwn"    in BUILTIN_COMMANDS
-        assert "plan"       in BUILTIN_COMMANDS
-        assert "suggest"    in BUILTIN_COMMANDS
-        assert "scan"       in BUILTIN_COMMANDS
-        assert "findings"   in BUILTIN_COMMANDS
-        assert "help"       in BUILTIN_COMMANDS
-        assert "clear"      in BUILTIN_COMMANDS
+        assert "autopwn" in BUILTIN_COMMANDS
+        assert "plan" in BUILTIN_COMMANDS
+        assert "suggest" in BUILTIN_COMMANDS
+        assert "scan" in BUILTIN_COMMANDS
+        assert "findings" in BUILTIN_COMMANDS
+        assert "help" in BUILTIN_COMMANDS
+        assert "clear" in BUILTIN_COMMANDS
 
 
 # ── intent_router tests ───────────────────────────────────────────────────────
+
 
 class TestIntentRouterSafetyBoundary:
     """
@@ -182,27 +195,29 @@ class TestIntentRouterSafetyBoundary:
     def test_smb_with_target_matches(self):
         result = route_intent("ms17-010 eternalblue", "192.168.1.10")
         assert result is not None
-        assert result["tool"] == "run_command"
-        assert "192.168.1.10" in result["args"]["command"]
+        assert result["tool"] == "smb_check"
+        assert result["args"]["target"] == "192.168.1.10"
 
     def test_ssh_with_target_matches(self):
         result = route_intent("check ssh auth methods", "10.0.2.5")
         assert result is not None
-        assert "10.0.2.5" in result["args"]["command"]
+        assert result["tool"] == "ssh_check"
+        assert result["args"]["target"] == "10.0.2.5"
 
     def test_conversational_text_with_target_no_match(self):
         """Greetings / generic questions must not match, even with a target."""
-        assert route_intent("hey",         "192.168.1.10") is None
+        assert route_intent("hey", "192.168.1.10") is None
         assert route_intent("what is smb", "192.168.1.10") is None
         # 'explain' + general phrasing must not match
         assert route_intent("explain the vulnerability", "192.168.1.10") is None
-        assert route_intent("hello",       "192.168.1.10") is None
+        assert route_intent("hello", "192.168.1.10") is None
         # NOTE: 'eternal blue' deliberately matches the SMB-vuln pattern —
         # that is why it requires the /run prefix to be safe. The CommandRouter
         # ensures bare text never reaches route_intent at all.
 
 
 # ── is_conversational tests (legacy — kept for reference) ────────────────────
+
 
 class TestIsConversational:
     """
@@ -228,6 +243,7 @@ class TestIsConversational:
 
 # ── CHAT_SYSTEM_PROMPT contract tests ─────────────────────────────────────────
 
+
 class TestChatSystemPrompt:
     def test_no_json_instruction(self):
         """Chat system prompt must never instruct the model to produce JSON tool calls."""
@@ -241,12 +257,16 @@ class TestChatSystemPrompt:
         assert "gobuster_scan" not in CHAT_SYSTEM_PROMPT
 
     def test_explicitly_forbids_json(self):
-        assert "NEVER produce JSON" in CHAT_SYSTEM_PROMPT or \
-               "never produce json" in CHAT_SYSTEM_PROMPT.lower()
+        assert (
+            "NEVER produce JSON" in CHAT_SYSTEM_PROMPT
+            or "never produce json" in CHAT_SYSTEM_PROMPT.lower()
+        )
 
     def test_conversation_mode_declared(self):
-        assert "CONVERSATION MODE" in CHAT_SYSTEM_PROMPT or \
-               "conversation mode" in CHAT_SYSTEM_PROMPT.lower()
+        assert (
+            "CONVERSATION MODE" in CHAT_SYSTEM_PROMPT
+            or "conversation mode" in CHAT_SYSTEM_PROMPT.lower()
+        )
 
     def test_no_tool_list(self):
         """Chat prompt must not describe the available tools."""
@@ -257,37 +277,45 @@ class TestChatSystemPrompt:
 
 # ── ChatAIClient contract tests ───────────────────────────────────────────────
 
+
 class TestChatAIClientContract:
     def test_no_extract_tool_call_method(self):
         """ChatAIClient must not expose extract_tool_call — prevent accidental tool dispatch."""
         from hydrasight.services.chat_ai_client import ChatAIClient
+
         assert not hasattr(ChatAIClient, "extract_tool_call"), (
             "ChatAIClient must NOT have extract_tool_call() — "
             "adding this method is a safety violation"
         )
 
     def test_uses_chat_system_prompt(self):
+        import inspect
+
         from hydrasight.services.chat_ai_client import ChatAIClient
-        import inspect, textwrap
+
         source = inspect.getsource(ChatAIClient.__init__)
         assert "CHAT_SYSTEM_PROMPT" in source
 
     def test_separate_from_ai_client(self):
         """ChatAIClient and AIClient must be separate classes."""
-        from hydrasight.services.chat_ai_client import ChatAIClient
         from hydrasight.services.ai_client import AIClient
+        from hydrasight.services.chat_ai_client import ChatAIClient
+
         assert ChatAIClient is not AIClient
 
     def test_chat_context_smaller_than_orchestration(self):
         """Chat uses smaller context to enforce separation."""
         import logging
+
         from hydrasight.services.chat_ai_client import ChatAIClient
+
         log = logging.getLogger("test")
         c = ChatAIClient("http://localhost:11434", "qwen2.5:7b", 8192, log)
         assert c.context <= 4096
 
 
 # ── Shell integration tests (mocked) ─────────────────────────────────────────
+
 
 class TestShellSafety:
     """
@@ -299,9 +327,10 @@ class TestShellSafety:
     def shell(self):
         """Build a minimal Shell with all network/IO mocked."""
         from hydrasight.config.defaults import DEFAULT_CONFIG
+
         cfg = dict(DEFAULT_CONFIG)
         cfg["verbosity"] = 0
-        cfg["log_file"]  = "test.log"
+        cfg["log_file"] = "test.log"
 
         with (
             patch("hydrasight.cli.shell.KaliAPI"),
@@ -309,15 +338,15 @@ class TestShellSafety:
             patch("hydrasight.cli.shell.Dispatcher"),
             patch("hydrasight.cli.shell.Engine"),
             patch("hydrasight.cli.shell.ChatController"),
-            patch("hydrasight.cli.shell._setup_log",
-                  return_value=logging.getLogger("test")),
+            patch("hydrasight.cli.shell._setup_log", return_value=logging.getLogger("test")),
         ):
             from hydrasight.cli.shell import Shell
+
             sh = Shell(cfg)
         return sh
 
     def _dispatch_called(self, shell) -> bool:
-        return shell.dispatcher.dispatch.called
+        return bool(shell.dispatcher.dispatch.called)
 
     def test_hey_does_not_dispatch(self, shell):
         shell._on_bare_text("hey")
@@ -355,9 +384,7 @@ class TestShellSafety:
 
     def test_on_run_with_ip_and_match_dispatches(self, shell):
         """_on_run with explicit IP and matching pattern SHOULD dispatch."""
-        shell.dispatcher.dispatch.return_value = (
-            "run_command", "nmap output here", 1.5
-        )
+        shell.dispatcher.dispatch.return_value = ("run_command", "nmap output here", 1.5)
         shell.ai.ask.return_value = "PORTS: 445\nVULNS: none\nNOTES: ok"
         shell.engine._ingest = MagicMock()
         shell._on_run("check smb vuln ms17-010 on 192.168.1.10")

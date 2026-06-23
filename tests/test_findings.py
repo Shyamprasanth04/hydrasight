@@ -1,6 +1,9 @@
 """Tests for Findings — thread safety and data integrity."""
+
 import threading
+
 import pytest
+
 from hydrasight.models.findings import Findings
 
 
@@ -55,8 +58,9 @@ class TestFindingsBasic:
         assert len(f.credentials) == 1
 
     def test_add_hash(self, f):
-        f.add_hash("Administrator", "aad3b435b51404eeaad3b435b51404ee",
-                   "31d6cfe0d16ae931b73c59d7e0c089c0")
+        f.add_hash(
+            "Administrator", "aad3b435b51404eeaad3b435b51404ee", "31d6cfe0d16ae931b73c59d7e0c089c0"
+        )
         assert len(f.hashes) == 1
 
     def test_add_hash_dedup(self, f):
@@ -127,8 +131,7 @@ class TestFindingsThreadSafety:
                 except Exception as exc:
                     errors.append(exc)
 
-        threads = [threading.Thread(target=add_ports, args=(i * 50,))
-                   for i in range(4)]
+        threads = [threading.Thread(target=add_ports, args=(i * 50,)) for i in range(4)]
         for t in threads:
             t.start()
         for t in threads:
@@ -147,8 +150,7 @@ class TestFindingsThreadSafety:
                 except Exception as exc:
                     errors.append(exc)
 
-        threads = [threading.Thread(target=add_vulns, args=(f"T{i}",))
-                   for i in range(5)]
+        threads = [threading.Thread(target=add_vulns, args=(f"T{i}",)) for i in range(5)]
         for t in threads:
             t.start()
         for t in threads:

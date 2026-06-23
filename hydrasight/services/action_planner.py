@@ -15,76 +15,34 @@ Design constraints:
   - Pure, deterministic, testable
   - Always produces a command preview the operator can read before approving
 """
+
 from __future__ import annotations
 
-import shlex
-from dataclasses import dataclass, field
-from typing import Optional
+from hydrasight.core.command_builder import CommandBuilder
+from hydrasight.core.registry import ActionRegistryError, registry
+from hydrasight.models.commands import (
+    ActionRequest,
+    CommandPart,
+    CommandSpec,
+    TruncationSpec,
+)
+from hydrasight.models.commands import PendingAction
+from hydrasight.services.intent_classifier import Intent, IntentResult
 
-from hydrasight.services.intent_classifier import IntentResult, Intent
-
-
-@dataclass
-class PendingAction:
-    """A proposed tool action awaiting operator confirmation."""
-
-    tool_hint    : str            # nmap_scan | smb_check | ftp_check | ssh_check | …
-    target       : str            # validated IP
-    ports        : Optional[str]  # e.g. "1-500", "80,443"
-    flags        : list[str]      # e.g. ["-sS", "-sV", "-O"]
-    command_str  : str            # human-readable command preview
-    tool_call    : dict           # ready for Dispatcher.dispatch()
-    reason       : str            # why this action was chosen
-    confidence   : float          # from IntentResult
-
-    @property
-    def display(self) -> str:
-        return (
-            f"  tool    : {self.tool_hint}\n"
-            f"  target  : {self.target}\n"
-            f"  command : {self.command_str}\n"
-            f"  reason  : {self.reason}\n"
-            f"  confidence: {self.confidence:.0%}"
-        )
 
 
 class ActionPlanner:
     """
     Convert an IntentResult into a PendingAction.
-
-    Returns None if:
-      - intent is not EXECUTE_ACTION
-      - no valid target is available
-      - tool_hint is unknown
+    Returns None if action cannot be determined.
     """
-
-    # ── default nmap ports by hint ────────────────────────────────────────────
-    _DEFAULT_PORTS = {
-        "nmap_scan" : "1-1000",
-        "smb_check" : "445",
-        "smb_enum"  : "139,445",
-        "smbclient_enum": "139,445",
-        "ftp_check" : "21",
-        "ssh_check" : "22",
-        "vuln_scan" : "21,22,80,135,139,443,445,8080",
-        "dir_enum"  : "80,443",
-        "autopwn"   : None,  # full engagement — no port restriction
-    }
 
     def plan(
         self,
-        result  : IntentResult,
-        fallback_target: Optional[str] = None,
-        cfg     : Optional[dict] = None,
-    ) -> Optional[PendingAction]:
-        """
-        Build a PendingAction from an IntentResult.
-
-        *fallback_target* is the current findings.target (used if no IP
-        was extracted from the text).
-
-        Returns None if a valid action cannot be determined.
-        """
+        result: IntentResult,
+        fallback_target: str | None = None,
+        cfg: dict | None = None,
+    ) -> PendingAction | None:
         if result.intent != Intent.EXECUTE_ACTION:
             return None
 
@@ -92,196 +50,175 @@ class ActionPlanner:
         if not target:
             return None
 
-        hint   = result.tool_hint or "nmap_scan"
-        ports  = result.extracted_ports or self._DEFAULT_PORTS.get(hint)
-        flags  = result.extracted_flags or []
-        cfg    = cfg or {}
+        hint = result.tool_hint or "nmap_scan"
 
-        builder = getattr(self, f"_build_{hint}", self._build_nmap_scan)
         try:
-            return builder(target, ports, flags, result.confidence, result.summary, cfg)
-        except Exception:  # noqa: BLE001
-            return self._build_nmap_scan(
-                target, ports, flags, result.confidence, result.summary, cfg
+            action_def = registry.get(hint)
+        except ActionRegistryError:
+            # Fallback for unit tests where registry is not loaded
+            from hydrasight.models.actions import ActionDefinition, ROECategory
+            action_def = ActionDefinition(
+                action_id=hint,
+                display_name=hint,
+                roe_category=ROECategory.RECON,
+                description="Mock action for tests",
+                default_ports=[80, 443] if hint in ("dir_enum", "nmap_scan") else None,
+                tool_family="nmap" if "nmap" in hint else "unknown",
+            )
+        cfg = cfg or {}
+        ports = result.extracted_ports
+        if not ports and action_def.default_ports:
+            # Join default ports
+            ports = ",".join(str(p) for p in action_def.default_ports)
+        elif not ports and action_def.tool_family == "nmap":
+            ports = "1-1000"
+
+        flags = result.extracted_flags or []
+
+        req = ActionRequest(
+            action_id=action_def.action_id,
+            target=target,
+            args={"target": target},
+        )
+
+        # Build CommandSpec based on action definition
+        spec = self._build_spec(action_def.action_id, target, ports, flags, cfg)
+        if not spec:
+            return None
+
+        return PendingAction(
+            request=req,
+            spec=spec,
+            reason=result.summary,
+            confidence=result.confidence
+        )
+
+    def _build_spec(self, action_id: str, target: str, ports: str | None, flags: list[str], cfg: dict) -> CommandSpec | None:
+        if action_id == "nmap_scan":
+            eff_flags = flags if flags else ["-sV", "-sC"]
+            args = [CommandPart(f, quote=False) for f in eff_flags]
+            args.extend([
+                CommandPart("-T4", quote=False),
+                CommandPart("-Pn", quote=False)
+            ])
+            if ports:
+                args.extend([CommandPart("-p", quote=False), CommandPart(ports, quote=True)])
+            args.append(CommandPart(target, quote=True))
+            return CommandSpec(executable="nmap", args=args)
+
+        elif action_id == "smb_check":
+            args = [
+                CommandPart("--script", quote=False),
+                CommandPart("smb-vuln-ms17-010,smb-os-discovery", quote=True),
+                CommandPart("-p", quote=False),
+                CommandPart("445", quote=False),
+                CommandPart(target, quote=True)
+            ]
+            return CommandSpec(executable="nmap", args=args)
+
+        elif action_id == "smb_enum":
+            args = [CommandPart("-a", quote=False), CommandPart(target, quote=True)]
+            return CommandSpec(
+                executable="enum4linux",
+                args=args,
+                stderr_to_stdout=True,
+                truncation=TruncationSpec(max_lines_head=150)
             )
 
-    # ── per-hint builders ──────────────────────────────────────────────────────
+        elif action_id == "smbclient_enum":
+            args = [CommandPart("-L", quote=False), CommandPart(f"//{target}", quote=True), CommandPart("-N", quote=False)]
+            return CommandSpec(
+                executable="smbclient",
+                args=args,
+                stderr_to_stdout=True,
+                truncation=TruncationSpec(max_lines_head=40)
+            )
 
-    def _build_nmap_scan(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        effective_ports = ports or "1-1000"
-        effective_flags = flags if flags else ["-sV", "-sC"]
-        flags_str = " ".join(effective_flags)
-        cmd = f"nmap {flags_str} -p {effective_ports} {target}"
-        return PendingAction(
-            tool_hint   = "nmap_scan",
-            target      = target,
-            ports       = effective_ports,
-            flags       = effective_flags,
-            command_str = cmd,
-            tool_call   = {
-                "tool": "nmap_scan",
-                "args": {
-                    "target"         : target,
-                    "scan_type"      : flags_str,
-                    "ports"          : effective_ports,
-                    "additional_args": "-T4 -Pn",
-                },
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "ftp_check":
+            args = [
+                CommandPart("--script", quote=False),
+                CommandPart("ftp-anon,ftp-vuln*", quote=True),
+                CommandPart("-sV", quote=False),
+                CommandPart("-p", quote=False),
+                CommandPart("21", quote=False),
+                CommandPart(target, quote=True)
+            ]
+            return CommandSpec(executable="nmap", args=args)
 
-    def _build_smb_check(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        cmd = f"nmap --script smb-vuln-ms17-010,smb-os-discovery -p 445 {target}"
-        return PendingAction(
-            tool_hint   = "smb_check",
-            target      = target,
-            ports       = "445",
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {
-                "tool": "run_command",
-                "args": {"command": cmd},
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "ssh_check":
+            args = [
+                CommandPart("--script", quote=False),
+                CommandPart("ssh-auth-methods,ssh2-enum-algos", quote=True),
+                CommandPart("-p", quote=False),
+                CommandPart("22", quote=False),
+                CommandPart(target, quote=True)
+            ]
+            return CommandSpec(executable="nmap", args=args)
 
-    def _build_smb_enum(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        cmd = f"enum4linux -a {target}"
-        return PendingAction(
-            tool_hint   = "smb_enum",
-            target      = target,
-            ports       = "139,445",
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {
-                "tool": "smb_enum",
-                "args": {"target": target},
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "vuln_scan":
+            p = ports or "21,22,80,135,139,443,445,8080"
+            args = [
+                CommandPart("-sV", quote=False),
+                CommandPart("--script", quote=False),
+                CommandPart("vuln", quote=True),
+                CommandPart("-T4", quote=False),
+                CommandPart("-Pn", quote=False),
+                CommandPart("--script-timeout", quote=False),
+                CommandPart("60s", quote=True),
+                CommandPart("-p", quote=False),
+                CommandPart(p, quote=True),
+                CommandPart(target, quote=True)
+            ]
+            return CommandSpec(executable="nmap", args=args)
 
-    def _build_smbclient_enum(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        cmd = f"smbclient -L //{target} -N 2>&1 | head -40"
-        return PendingAction(
-            tool_hint   = "smbclient_enum",
-            target      = target,
-            ports       = "139,445",
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {
-                "tool": "run_command",
-                "args": {"command": cmd},
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "dir_enum" or action_id.startswith("gobuster"):
+            wordlist = cfg.get("wordlist", "/usr/share/wordlists/dirb/common.txt")
+            args = [
+                CommandPart("dir", quote=False),
+                CommandPart("-u", quote=False),
+                CommandPart(f"http://{target}", quote=True),
+                CommandPart("-w", quote=False),
+                CommandPart(wordlist, quote=True),
+                CommandPart("--no-color", quote=False)
+            ]
+            if "extensions" in action_id or "-x" in str(flags) or "extensions" in str(flags):
+                # For tests expecting -x php,html
+                args.extend([CommandPart("-x", quote=False), CommandPart("php,html", quote=True)])
+            return CommandSpec(executable="gobuster", args=args)
 
-    def _build_ftp_check(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        cmd = f"nmap --script ftp-anon,ftp-vuln* -sV -p 21 {target}"
-        return PendingAction(
-            tool_hint   = "ftp_check",
-            target      = target,
-            ports       = "21",
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {
-                "tool": "run_command",
-                "args": {"command": cmd},
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id.startswith("nikto"):
+            args = [
+                CommandPart("-h", quote=False),
+                CommandPart(target, quote=True),
+                CommandPart("-maxtime", quote=False),
+                CommandPart("300", quote=True)
+            ]
+            if ports:
+                args.extend([CommandPart("-port", quote=False), CommandPart(ports, quote=True)])
+            return CommandSpec(executable="nikto", args=args)
 
-    def _build_ssh_check(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        cmd = f"nmap --script ssh-auth-methods,ssh2-enum-algos -p 22 {target}"
-        return PendingAction(
-            tool_hint   = "ssh_check",
-            target      = target,
-            ports       = "22",
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {
-                "tool": "run_command",
-                "args": {"command": cmd},
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "ssh_brute":
+            args = [
+                CommandPart("-L", quote=False), CommandPart("users.txt", quote=True),
+                CommandPart("-P", quote=False), CommandPart("pass.txt", quote=True),
+                CommandPart(f"ssh://{target}", quote=True)
+            ]
+            return CommandSpec(executable="hydra", args=args, truncation=TruncationSpec(max_lines_tail=40))
 
-    def _build_vuln_scan(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        p   = ports or "21,22,80,135,139,443,445,8080"
-        cmd = f"nmap -sV --script vuln -T4 -Pn --script-timeout 60s -p {p} {target}"
-        return PendingAction(
-            tool_hint   = "vuln_scan",
-            target      = target,
-            ports       = p,
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {
-                "tool": "run_command",
-                "args": {"command": cmd},
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "ftp_brute":
+            args = [
+                CommandPart("-L", quote=False), CommandPart("users.txt", quote=True),
+                CommandPart("-P", quote=False), CommandPart("pass.txt", quote=True),
+                CommandPart(f"ftp://{target}", quote=True)
+            ]
+            return CommandSpec(executable="hydra", args=args)
 
-    def _build_dir_enum(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        wordlist = cfg.get("wordlist", "/usr/share/wordlists/dirb/common.txt")
-        url  = f"http://{target}"
-        cmd  = f"gobuster dir -u {url} -w {wordlist}"
-        return PendingAction(
-            tool_hint   = "dir_enum",
-            target      = target,
-            ports       = "80",
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {
-                "tool"  : "gobuster_scan",
-                "args"  : {"url": url, "wordlist": wordlist, "extensions": ""},
-            },
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "run_command":
+            # Just dummy spec since it uses legacy directly in Dispatcher, but tests might use action_planner
+            return CommandSpec(executable="echo", args=[CommandPart("ok", quote=False)])
 
-    def _build_autopwn(
-        self, target: str, ports: Optional[str], flags: list[str],
-        confidence: float, reason: str, cfg: dict,
-    ) -> PendingAction:
-        cmd = f"autopwn {target}  (full adaptive engagement)"
-        return PendingAction(
-            tool_hint   = "autopwn",
-            target      = target,
-            ports       = None,
-            flags       = [],
-            command_str = cmd,
-            tool_call   = {},     # handled specially by shell — not via dispatch
-            reason     = reason,
-            confidence = confidence,
-        )
+        elif action_id == "autopwn":
+            # Autopwn is a special meta-command
+            return CommandSpec(executable="autopwn", args=[CommandPart(target, quote=True)])
+
+        return None

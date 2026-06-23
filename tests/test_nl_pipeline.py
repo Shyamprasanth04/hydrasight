@@ -9,17 +9,18 @@ These tests prove that:
 - ambiguous intents safely request clarification.
 - explicit builtins bypass ambiguity.
 """
-import pytest
+
 from unittest.mock import MagicMock, patch
 
-from hydrasight.services.intent_classifier import IntentClassifier, Intent
-from hydrasight.services.action_planner import ActionPlanner
+import pytest
+
+from hydrasight.services.command_router import InputClass
 from hydrasight.services.confirmation_manager import ConfirmationManager
 from hydrasight.services.execution_policy import ExecutionPolicy
-from hydrasight.services.command_router import CommandRouter, InputClass
-
+from hydrasight.services.intent_classifier import Intent, IntentClassifier
 
 # ── Component tests ──────────────────────────────────────────────────────────
+
 
 def test_intent_classifier_chat_and_explain():
     classifier = IntentClassifier()
@@ -64,12 +65,14 @@ def test_intent_classifier_smb_routing():
     assert res3.intent == Intent.EXECUTE_ACTION
     assert res3.tool_hint == "smb_enum"
 
+
 def test_intent_classifier_smbclient_routing():
     classifier = IntentClassifier()
     res = classifier.classify("enumerate SMB shares using smbclient on 10.129.74.47")
     assert res.intent == Intent.EXECUTE_ACTION
     assert res.tool_hint == "smbclient_enum"
     assert res.extracted_ip == "10.129.74.47"
+
 
 def test_intent_classifier_run_command_guardrail():
     classifier = IntentClassifier()
@@ -86,12 +89,19 @@ def test_intent_classifier_run_command_guardrail():
 
 def test_confirmation_manager_lifecycle():
     from hydrasight.services.action_planner import PendingAction
+
     mgr = ConfirmationManager()
     assert not mgr.has_pending
 
     action = PendingAction(
-        tool_hint="test", target="1.1.1.1", ports=None, flags=[],
-        command_str="cmd", tool_call={}, reason="", confidence=1.0
+        tool_hint="test",
+        target="1.1.1.1",
+        ports=None,
+        flags=[],
+        command_str="cmd",
+        tool_call={},
+        reason="",
+        confidence=1.0,
     )
     mgr.set(action)
     assert mgr.has_pending
@@ -115,7 +125,7 @@ def test_confirmation_manager_lifecycle():
     resolution, act = mgr.try_resolve("what is smb")
     assert resolution is None
     assert act is None
-    # the caller (shell) is responsible for calling clear() on unrelated input, 
+    # the caller (shell) is responsible for calling clear() on unrelated input,
     # but the try_resolve itself doesn't clear it unless it's a valid yes/no.
     mgr.clear()
     assert not mgr.has_pending
@@ -123,44 +133,54 @@ def test_confirmation_manager_lifecycle():
 
 def test_execution_policy_modes():
     policy = ExecutionPolicy()
-    
+
     # 1. Safe intent
     from hydrasight.services.intent_classifier import IntentResult
+
     safe_res = IntentResult(intent=Intent.EXPLAIN, confidence=0.9)
     assert policy.decide(safe_res, None, "confirm").action == "chat"
     assert policy.decide(safe_res, None, "auto").action == "chat"
-    
+
     # 2. Execute intent
     from hydrasight.services.action_planner import PendingAction
+
     exec_res = IntentResult(intent=Intent.EXECUTE_ACTION, confidence=0.9, extracted_ip="1.1.1.1")
     pending = PendingAction(
-        tool_hint="test", target="1.1.1.1", ports=None, flags=[],
-        command_str="cmd", tool_call={}, reason="", confidence=0.9
+        tool_hint="test",
+        target="1.1.1.1",
+        ports=None,
+        flags=[],
+        command_str="cmd",
+        tool_call={},
+        reason="",
+        confidence=0.9,
     )
-    
+
     # confirm mode
     assert policy.decide(exec_res, pending, "confirm").action == "confirm"
-    
+
     # auto mode (high confidence)
     assert policy.decide(exec_res, pending, "auto").action == "execute"
-    
+
     # auto mode (low confidence) -> drops to confirm
     low_res = IntentResult(intent=Intent.EXECUTE_ACTION, confidence=0.5, extracted_ip="1.1.1.1")
     pending.confidence = 0.5
     assert policy.decide(low_res, pending, "auto").action == "confirm"
-    
+
     # never mode
     assert policy.decide(exec_res, pending, "never").action == "suggest"
 
 
 # ── Shell Integration Mock Tests ─────────────────────────────────────────────
 
+
 @pytest.fixture
 def shell():
     from hydrasight.config.defaults import DEFAULT_CONFIG
+
     cfg = dict(DEFAULT_CONFIG)
     cfg["verbosity"] = 0
-    cfg["log_file"]  = "test.log"
+    cfg["log_file"] = "test.log"
     cfg["execution_mode"] = "confirm"
 
     with (
@@ -169,9 +189,10 @@ def shell():
         patch("hydrasight.cli.shell.Dispatcher"),
         patch("hydrasight.cli.shell.Engine"),
         patch("hydrasight.cli.shell.ChatController"),
-        patch("hydrasight.cli.shell._setup_log")
+        patch("hydrasight.cli.shell._setup_log"),
     ):
         from hydrasight.cli.shell import Shell
+
         sh = Shell(cfg)
         # Mock the dispatch functions directly to test routing
         sh._chat.chat = MagicMock()
@@ -179,35 +200,46 @@ def shell():
         sh._show_plan = MagicMock()
         return sh
 
+
 def test_shell_chat_only(shell):
     shell._on_bare_text("what is smb signing")
     shell._chat.chat.assert_called_once()
     shell._dispatch_pending_action.assert_not_called()
 
+
 def test_chat_controller_sanitizer():
-    from hydrasight.services.chat_controller import ChatController
     import logging
-    
+
+    from hydrasight.services.chat_controller import ChatController
+
     class FakeAI:
-        def __init__(self, *a, **k): self.call_count = 1; self.messages = []
-        def ask(self, p): return "I cannot directly execute commands for you."
-        def reset(self): pass
+        def __init__(self, *a, **k):
+            self.call_count = 1
+            self.messages = []
+
+        def ask(self, p):
+            return "I cannot directly execute commands for you."
+
+        def reset(self):
+            pass
 
     cc = ChatController("http", "model", 4000, logging.getLogger())
     cc._ai = FakeAI()
-    
+
     with patch("hydrasight.services.chat_controller.console.print") as mock_print:
         cc.chat("execute it against a target 10.129.72.237")
-        
+
     args_str = " ".join(str(call.args) for call in mock_print.call_args_list)
     assert "cannot directly execute commands" not in args_str.lower()
     assert "no action has been launched" in args_str.lower()
+
 
 def test_shell_model_json_is_chat(shell):
     # Model accidentally emitted JSON in chat path
     shell._on_bare_text('{"tool": "nmap_scan"}')
     shell._chat.chat.assert_called_once()
     shell._dispatch_pending_action.assert_not_called()
+
 
 def test_shell_nl_execute_confirm_mode(shell):
     shell._on_bare_text("run an nmap scan on 192.168.100.131")
@@ -219,6 +251,7 @@ def test_shell_nl_execute_confirm_mode(shell):
     shell._dispatch_pending_action.assert_called_once()
     assert not shell._confirm.has_pending
 
+
 def test_shell_nl_execute_cancel(shell):
     shell._on_bare_text("run an nmap scan on 192.168.100.131")
     assert shell._confirm.has_pending
@@ -227,6 +260,7 @@ def test_shell_nl_execute_cancel(shell):
     shell._on_bare_text("no")
     shell._dispatch_pending_action.assert_not_called()
     assert not shell._confirm.has_pending
+
 
 def test_shell_unrelated_clears_pending(shell):
     shell._on_bare_text("run an nmap scan on 192.168.100.131")
@@ -239,14 +273,16 @@ def test_shell_unrelated_clears_pending(shell):
     assert shell._confirm.pending.tool_hint == "ftp_check"
     shell._dispatch_pending_action.assert_not_called()
 
+
 def test_shell_explain_preserves_pending(shell):
     shell._on_bare_text("run an nmap scan on 192.168.100.131")
     assert shell._confirm.has_pending
-    
+
     # Ask for explanation of what the command does
     shell._on_bare_text("what does an nmap scan do?")
     assert shell._confirm.has_pending
     shell._chat.chat.assert_called_once()
+
 
 def test_shell_never_mode(shell):
     shell.cfg["execution_mode"] = "never"
@@ -254,16 +290,19 @@ def test_shell_never_mode(shell):
     # Will print suggestion, not propose
     shell._dispatch_pending_action.assert_not_called()
 
+
 def test_shell_auto_mode(shell):
     shell.cfg["execution_mode"] = "auto"
     shell._on_bare_text("run an nmap scan on 192.168.100.131")
     # High confidence exec verb + tool word + IP -> exec directly
     shell._dispatch_pending_action.assert_called_once()
 
+
 def test_shell_plan_dry_run(shell):
     shell._on_bare_text("plan")
     shell._show_plan.assert_called_once()
     shell._dispatch_pending_action.assert_not_called()
+
 
 def test_shell_scan_builtin(shell):
     # Builtins go through the loop, bypassing _on_bare_text.
@@ -274,6 +313,7 @@ def test_shell_scan_builtin(shell):
 
 
 # ── Goal 2: Operational meta-intent classification ────────────────────────────
+
 
 def test_intent_execute_plan_variants():
     """do all planned stuff / run the plan → EXECUTE_PLAN intent."""
@@ -341,6 +381,7 @@ def test_intent_show_conclusion_variants():
 
 # ── Goal 4: SMB enumeration phrase priority ───────────────────────────────────
 
+
 def test_smb_enum_prioritized_over_smb_check():
     """'smb enumeration scan' must route to smb_enum not smb_check."""
     classifier = IntentClassifier()
@@ -353,9 +394,7 @@ def test_smb_enum_prioritized_over_smb_check():
     ]:
         res = classifier.classify(phrase)
         assert res.intent == Intent.EXECUTE_ACTION, f"'{phrase}' expected EXECUTE_ACTION"
-        assert res.tool_hint == "smb_enum", (
-            f"'{phrase}' expected smb_enum, got {res.tool_hint}"
-        )
+        assert res.tool_hint == "smb_enum", f"'{phrase}' expected smb_enum, got {res.tool_hint}"
 
 
 def test_smb_check_still_works():
@@ -366,6 +405,7 @@ def test_smb_check_still_works():
 
 
 # ── Goal 2 + shell: meta-intents route to internal methods ────────────────────
+
 
 def test_shell_verify_findings_routes_to_run_verify(shell):
     shell._run_verify = MagicMock()
@@ -400,10 +440,12 @@ def test_shell_execute_plan_no_target_warns(shell):
 
 # ── Goal 3: fake-execution guard in ChatController ────────────────────────────
 
+
 def test_chat_controller_blocks_fake_exec_claims():
     """Responses claiming 'I will begin' / 'Starting now' must be intercepted."""
-    from hydrasight.services.chat_controller import ChatController
     import logging
+
+    from hydrasight.services.chat_controller import ChatController
 
     FAKE_REPLIES = [
         "I will begin the SMB enumeration now.",
@@ -415,13 +457,17 @@ def test_chat_controller_blocks_fake_exec_claims():
     ]
 
     for fake_reply in FAKE_REPLIES:
+
         class FakeAI:
             def __init__(self, *a, **k):
                 self.call_count = 0
                 self.messages = []
-            def ask(self, p):
-                return fake_reply
-            def reset(self): pass
+
+            def ask(self, p, fr=fake_reply):
+                return fr
+
+            def reset(self):
+                pass
 
         cc = ChatController("http", "model", 4000, logging.getLogger("test"))
         cc._ai = FakeAI()
@@ -442,6 +488,9 @@ def test_chat_controller_blocks_fake_exec_claims():
 
 # ── Goal 1: _chat_context() provides state context ────────────────────────────
 
+
+
+
 def test_shell_chat_context_returns_state_block(shell):
     """_chat_context() must always return a string with context headers."""
     # Without findings
@@ -450,3 +499,44 @@ def test_shell_chat_context_returns_state_block(shell):
     assert "HydraSight Engagement Context" in ctx
     assert "RULES:" in ctx
     assert "NEVER invent" in ctx
+
+
+# ── AIClient model matching / think-strip (Phase 5 additions) ─────────────────
+
+
+def test_extract_tool_call_strips_think_tags():
+    """extract_tool_call must handle Qwen3 <think>...</think> prefix."""
+    import logging
+
+    from hydrasight.services.ai_client import AIClient
+
+    client = AIClient("http://localhost:11434", "test:model", 8192, logging.getLogger("t"))
+    text = (
+        "<think>Considering the task, I should produce a nmap tool call.</think>\n"
+        '{"tool":"nmap_scan","args":{"target":"10.0.0.1","scan_type":"-sV","ports":"1-1000","additional_args":""}}'
+    )
+    tc = client.extract_tool_call(text)
+    assert tc is not None, "extract_tool_call returned None with <think> prefix"
+    assert tc["tool"] == "nmap_scan"
+
+
+def test_extract_tool_call_strips_fenced_json():
+    """extract_tool_call must strip markdown code fences."""
+    import logging
+
+    from hydrasight.services.ai_client import AIClient
+
+    client = AIClient("http://localhost:11434", "test:model", 8192, logging.getLogger("t"))
+    text = '```json\n{"tool":"smb_enum","args":{"target":"10.0.0.2"}}\n```'
+    tc = client.extract_tool_call(text)
+    assert tc is not None
+    assert tc["tool"] == "smb_enum"
+
+
+def test_model_base_strips_namespace_and_tag():
+    """_model_base must correctly handle qcwind/ namespace prefix."""
+    from hydrasight.services.ai_client import _model_base
+
+    assert _model_base("qcwind/qwen3-8b-instruct-Q4-K-M:latest") == "qwen3-8b-instruct-q4-k-m"
+    assert _model_base("qwen2.5:7b") == "qwen2.5"
+    assert _model_base("llama3") == "llama3"

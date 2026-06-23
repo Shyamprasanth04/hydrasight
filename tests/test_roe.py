@@ -1,6 +1,7 @@
 """Tests for RulesOfEngagement."""
+
 import pytest
-import time
+
 from hydrasight.models.roe import RulesOfEngagement
 
 
@@ -12,13 +13,13 @@ def default_roe() -> RulesOfEngagement:
 @pytest.fixture
 def strict_roe() -> RulesOfEngagement:
     return RulesOfEngagement(
-        allowed_targets      = ["192.168.1.10", "10.0.0.0/24"],
-        blocked_ports        = [23, 25, 110],
-        blocked_modules      = ["exploit/windows/smb/ms17_010"],
-        require_approval_for = ["EXPLOIT", "POST_EXPLOIT"],
-        max_runtime_minutes  = 30,
-        max_threads          = 2,
-        kill_switch          = False,
+        allowed_targets=["192.168.1.10", "10.0.0.0/24"],
+        blocked_ports=[23, 25, 110],
+        blocked_modules=["exploit/windows/smb/ms17_010"],
+        require_approval_for=["EXPLOIT", "POST_EXPLOIT"],
+        max_runtime_minutes=30,
+        max_threads=2,
+        kill_switch=False,
     )
 
 
@@ -71,9 +72,7 @@ class TestPortBlocking:
 
 class TestModuleBlocking:
     def test_blocked_module_substring(self, strict_roe):
-        assert strict_roe.is_module_blocked(
-            "exploit/windows/smb/ms17_010_eternalblue"
-        ) is True
+        assert strict_roe.is_module_blocked("exploit/windows/smb/ms17_010_eternalblue") is True
 
     def test_allowed_module(self, strict_roe):
         assert strict_roe.is_module_blocked("auxiliary/scanner/ssh") is False
@@ -115,8 +114,9 @@ class TestRuntimeLimits:
 
     def test_runtime_remaining_decreases(self, strict_roe):
         import time as _time
+
         strict_roe.start_timer()
-        _time.sleep(0.05)          # ensure at least some time elapses
+        _time.sleep(0.05)  # ensure at least some time elapses
         remaining = strict_roe.runtime_remaining_minutes()
         assert remaining < float(strict_roe.max_runtime_minutes)
         assert remaining > 0.0
@@ -131,14 +131,14 @@ class TestSerialisation:
         assert "kill_switch" in d
 
     def test_from_dict_roundtrip(self, strict_roe):
-        d   = strict_roe.to_dict()
+        d = strict_roe.to_dict()
         roe = RulesOfEngagement.from_dict(d)
-        assert roe.allowed_targets       == strict_roe.allowed_targets
-        assert roe.blocked_ports         == strict_roe.blocked_ports
-        assert roe.blocked_modules       == strict_roe.blocked_modules
-        assert roe.require_approval_for  == strict_roe.require_approval_for
-        assert roe.max_runtime_minutes   == strict_roe.max_runtime_minutes
-        assert roe.kill_switch           == strict_roe.kill_switch
+        assert roe.allowed_targets == strict_roe.allowed_targets
+        assert roe.blocked_ports == strict_roe.blocked_ports
+        assert roe.blocked_modules == strict_roe.blocked_modules
+        assert roe.require_approval_for == strict_roe.require_approval_for
+        assert roe.max_runtime_minutes == strict_roe.max_runtime_minutes
+        assert roe.kill_switch == strict_roe.kill_switch
 
     def test_from_dict_partial(self):
         roe = RulesOfEngagement.from_dict({"max_runtime_minutes": 60})
@@ -167,5 +167,5 @@ class TestSummary:
 
     def test_summary_mentions_kill_switch(self):
         roe = RulesOfEngagement(kill_switch=True)
-        s   = roe.summary()
+        s = roe.summary()
         assert "KILL" in s or "kill" in s.lower()

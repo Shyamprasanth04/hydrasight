@@ -1,6 +1,6 @@
 """Tests for ip_utils — validation, dedup, force_ip."""
-import pytest
-from hydrasight.utils.ip_utils import is_valid_ip, dedup_ports, force_ip
+
+from hydrasight.utils.ip_utils import dedup_ports, force_ip, is_valid_ip
 
 
 class TestIsValidIP:
@@ -42,8 +42,8 @@ class TestDedupPorts:
     def test_sorted_output(self):
         ports = [
             {"port": 443, "proto": "tcp"},
-            {"port": 22,  "proto": "tcp"},
-            {"port": 80,  "proto": "tcp"},
+            {"port": 22, "proto": "tcp"},
+            {"port": 80, "proto": "tcp"},
         ]
         assert dedup_ports(ports) == [22, 80, 443]
 

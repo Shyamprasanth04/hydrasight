@@ -6,47 +6,50 @@ HydraSight would do without executing anything.
 
 This module is pure logic — no I/O, no Kali calls.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from hydrasight.integrations.exploit_suggestion import (
+    ExecutionMode,
     ExploitSuggestion,
     ExploitSuggestionProvider,
-    ExecutionMode,
 )
 
 if TYPE_CHECKING:
-    from hydrasight.models.findings      import Findings
-    from hydrasight.models.roe           import RulesOfEngagement
+    from hydrasight.models.findings import Findings
     from hydrasight.models.planner_state import PlannerState
+    from hydrasight.models.roe import RulesOfEngagement
 
 
 # ── engagement branch enum ─────────────────────────────────────────────────────
 
+
 class EngagementBranch(str, Enum):
-    RECON_ONLY       = "recon-only"
-    VALIDATION_ONLY  = "validation-only"
-    CREDENTIAL_LED   = "credential-led"
-    WEB_LED          = "web-led"
-    EXPLOIT_LED      = "exploit-led"
-    POST_ACCESS      = "post-access"
+    RECON_ONLY = "recon-only"
+    VALIDATION_ONLY = "validation-only"
+    CREDENTIAL_LED = "credential-led"
+    WEB_LED = "web-led"
+    EXPLOIT_LED = "exploit-led"
+    POST_ACCESS = "post-access"
 
 
 # ── plan item ─────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PlanItem:
     """A single phase in the proposed engagement plan."""
 
-    phase_id   : str
-    label      : str
-    reason     : str
-    blocked    : bool   = False
-    block_reason: str   = ""
-    gated      : bool   = False    # requires operator approval
+    phase_id: str
+    label: str
+    reason: str
+    blocked: bool = False
+    block_reason: str = ""
+    gated: bool = False  # requires operator approval
 
 
 @dataclass
@@ -61,13 +64,13 @@ class EngagementPlan:
     - summary text for display
     """
 
-    branch      : EngagementBranch
+    branch: EngagementBranch
     branch_reason: str
-    phases      : list[PlanItem]
-    suggestions : list[ExploitSuggestion]
-    has_target  : bool
-    target      : str
-    warnings    : list[str]
+    phases: list[PlanItem]
+    suggestions: list[ExploitSuggestion]
+    has_target: bool
+    target: str
+    warnings: list[str]
 
     # ── computed ──────────────────────────────────────────────────────────────
 
@@ -81,17 +84,11 @@ class EngagementPlan:
 
     @property
     def actionable_suggestions(self) -> list[ExploitSuggestion]:
-        return [
-            s for s in self.suggestions
-            if s.execution_mode != ExecutionMode.MANUAL_CHECK
-        ]
+        return [s for s in self.suggestions if s.execution_mode != ExecutionMode.MANUAL_CHECK]
 
     @property
     def manual_suggestions(self) -> list[ExploitSuggestion]:
-        return [
-            s for s in self.suggestions
-            if s.execution_mode == ExecutionMode.MANUAL_CHECK
-        ]
+        return [s for s in self.suggestions if s.execution_mode == ExecutionMode.MANUAL_CHECK]
 
     def summary_lines(self) -> list[str]:
         """Human-readable summary lines for display."""
@@ -111,6 +108,7 @@ class EngagementPlan:
 
 # ── planner ───────────────────────────────────────────────────────────────────
 
+
 class EngagementPlanner:
     """
     Pure dry-run planner — produces an EngagementPlan without executing anything.
@@ -121,27 +119,27 @@ class EngagementPlanner:
 
     # Phase label lookup
     _PHASE_LABELS: dict[str, str] = {
-        "RECON"       : "Initial recon (nmap -sV -sC)",
-        "DEEP_SCAN"   : "Deep port scan (1-65535)",
-        "FTP_CHECK"   : "FTP service probe",
-        "SMB_CHECK"   : "SMB/EternalBlue probe",
-        "SSH_CHECK"   : "SSH auth methods probe",
-        "WEB_FINGER"  : "Web fingerprint (whatweb)",
-        "WEB_DIR"     : "Web directory brute (gobuster)",
-        "WEB_VULN"    : "Web vulnerability scan (nikto)",
-        "VULN_SCAN"   : "Vulnerability scan (nmap --script vuln)",
-        "EXPLOIT"     : "Access attempt (ExploitSuggestionProvider)",
+        "RECON": "Initial recon (nmap -sV -sC)",
+        "DEEP_SCAN": "Deep port scan (1-65535)",
+        "FTP_CHECK": "FTP service probe",
+        "SMB_CHECK": "SMB/EternalBlue probe",
+        "SSH_CHECK": "SSH auth methods probe",
+        "WEB_FINGER": "Web fingerprint (whatweb)",
+        "WEB_DIR": "Web directory brute (gobuster)",
+        "WEB_VULN": "Web vulnerability scan (nikto)",
+        "VULN_SCAN": "Vulnerability scan (nmap --script vuln)",
+        "EXPLOIT": "Access attempt (ExploitSuggestionProvider)",
         "POST_EXPLOIT": "Post-access enumeration (PostAccessHandler)",
-        "HASH_CRACK"  : "Credential recovery (john)",
+        "HASH_CRACK": "Credential recovery (john)",
     }
 
     @classmethod
     def build(
         cls,
-        findings      : "Findings",
-        roe           : "RulesOfEngagement",
-        planner_state : Optional["PlannerState"] = None,
-        target        : str = "",
+        findings: Findings,
+        roe: RulesOfEngagement,
+        planner_state: PlannerState | None = None,
+        target: str = "",
     ) -> EngagementPlan:
         """
         Produce a full EngagementPlan from current findings state.
@@ -149,28 +147,23 @@ class EngagementPlanner:
         Safe to call at any point — before or after recon.
         """
         warnings: list[str] = []
-        port_set  = {p["port"]           for p in findings.ports}
-        services  = {p["service"].lower() for p in findings.ports}
-        has_web   = any(s in services for s in ("http", "https", "http-alt"))
-        has_smb   = 445 in port_set or 139 in port_set
-        has_ssh   = 22  in port_set
-        has_ftp   = 21  in port_set
+        port_set = {p["port"] for p in findings.ports}
+        services = {p["service"].lower() for p in findings.ports}
+        has_web = any(s in services for s in ("http", "https", "http-alt"))
+        has_smb = 445 in port_set or 139 in port_set
+        has_ssh = 22 in port_set
+        has_ftp = 21 in port_set
         has_creds = bool(findings.credentials)
         has_vulns = bool(findings.vulns)
         has_ports = bool(findings.ports)
         exploit_gated = roe.requires_approval("EXPLOIT")
 
         # ── gather suggestions ─────────────────────────────────────────────
-        suggestions = ExploitSuggestionProvider.from_findings(
-            findings, planner_state=planner_state
-        )
+        suggestions = ExploitSuggestionProvider.from_findings(findings, planner_state=planner_state)
         manual = ExploitSuggestionProvider.manual_suggestions(findings)
-        all_suggestions = suggestions + [
-            m for m in manual if m not in suggestions
-        ]
+        all_suggestions = suggestions + [m for m in manual if m not in suggestions]
         has_exploit_suggestions = any(
-            s.execution_mode != ExecutionMode.MANUAL_CHECK
-            for s in suggestions
+            s.execution_mode != ExecutionMode.MANUAL_CHECK for s in suggestions
         )
 
         # ── determine branch ───────────────────────────────────────────────
@@ -185,15 +178,13 @@ class EngagementPlanner:
             )
         elif has_exploit_suggestions:
             branch = EngagementBranch.EXPLOIT_LED
-            branch_reason = (
-                f"{len(suggestions)} exploit/access candidate(s) identified"
-                + (" (approval required)" if exploit_gated else "")
+            branch_reason = f"{len(suggestions)} exploit/access candidate(s) identified" + (
+                " (approval required)" if exploit_gated else ""
             )
         elif has_web:
             branch = EngagementBranch.WEB_LED
             branch_reason = (
-                "Web service(s) detected — fingerprint and directory "
-                "enumeration planned"
+                "Web service(s) detected — fingerprint and directory enumeration planned"
             )
         elif has_vulns:
             branch = EngagementBranch.VALIDATION_ONLY
@@ -235,7 +226,7 @@ class EngagementPlanner:
         phases: list[PlanItem] = []
         for ph in phase_ids:
             label = cls._PHASE_LABELS.get(ph, ph)
-            blocked     = False
+            blocked = False
             block_reason = ""
             gated = roe.requires_approval(ph)
 
@@ -243,17 +234,17 @@ class EngagementPlanner:
             if planner_state:
                 skip, skip_reason = planner_state.should_skip_phase(ph)
                 if skip:
-                    blocked      = True
+                    blocked = True
                     block_reason = f"planner: {skip_reason}"
 
             # Check ROE kill switch
             if roe.kill_switch:
-                blocked      = True
+                blocked = True
                 block_reason = "ROE kill switch active"
 
             # Check runtime
             if roe.is_runtime_exceeded():
-                blocked      = True
+                blocked = True
                 block_reason = "ROE max runtime exceeded"
 
             # Determine display reason
@@ -273,14 +264,16 @@ class EngagementPlanner:
             else:
                 reason = f"Service detected on port {cls._port_for_phase(ph, port_set)}"
 
-            phases.append(PlanItem(
-                phase_id    = ph,
-                label       = label,
-                reason      = reason,
-                blocked     = blocked,
-                block_reason= block_reason,
-                gated       = gated,
-            ))
+            phases.append(
+                PlanItem(
+                    phase_id=ph,
+                    label=label,
+                    reason=reason,
+                    blocked=blocked,
+                    block_reason=block_reason,
+                    gated=gated,
+                )
+            )
 
         # ── ROE warnings ───────────────────────────────────────────────────
         if roe.kill_switch:
@@ -295,25 +288,25 @@ class EngagementPlanner:
             warnings.append(f"Max runtime: {roe.max_runtime_minutes} min")
 
         return EngagementPlan(
-            branch       = branch,
-            branch_reason= branch_reason,
-            phases       = phases,
-            suggestions  = all_suggestions,
-            has_target   = bool(target or findings.target),
-            target       = target or findings.target,
-            warnings     = warnings,
+            branch=branch,
+            branch_reason=branch_reason,
+            phases=phases,
+            suggestions=all_suggestions,
+            has_target=bool(target or findings.target),
+            target=target or findings.target,
+            warnings=warnings,
         )
 
     @staticmethod
     def _port_for_phase(phase_id: str, port_set: set[int]) -> str:
         """Map phase to likely port for display."""
         mapping = {
-            "FTP_CHECK" : 21,
-            "SMB_CHECK" : 445,
-            "SSH_CHECK" : 22,
+            "FTP_CHECK": 21,
+            "SMB_CHECK": 445,
+            "SSH_CHECK": 22,
             "WEB_FINGER": 80,
-            "WEB_DIR"   : 80,
-            "WEB_VULN"  : 80,
+            "WEB_DIR": 80,
+            "WEB_VULN": 80,
         }
         port = mapping.get(phase_id)
         if port and port in port_set:

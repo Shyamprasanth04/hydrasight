@@ -20,6 +20,7 @@ Every raw input string is classified into exactly one of four cases:
 This module is intentionally free of AI calls, network access,
 and side effects — it is a pure classifier.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -27,32 +28,52 @@ from enum import Enum, auto
 
 
 class InputClass(Enum):
-    BUILTIN = auto()   # explicit shell command
-    ASK     = auto()   # /ask prefix  → chat, no tools
-    RUN     = auto()   # /run prefix  → tool routing allowed
-    CHAT    = auto()   # bare text    → chat, no tools
+    BUILTIN = auto()  # explicit shell command
+    ASK = auto()  # /ask prefix  → chat, no tools
+    RUN = auto()  # /run prefix  → tool routing allowed
+    CHAT = auto()  # bare text    → chat, no tools
 
 
 # ── set of all built-in command tokens ───────────────────────────────────────
 
-BUILTIN_COMMANDS: frozenset[str] = frozenset({
-    "autopwn", "scan",
-    "findings", "ports", "vulns", "creds", "hashes", "sessions",
-    "save", "report",
-    "status", "stats", "config", "history",
-    "roe", "verify",
-    "suggest", "plan", "conclusion",
-    "verbose", "clear", "mode",
-    "help", "exit", "quit", "abort",
-})
+BUILTIN_COMMANDS: frozenset[str] = frozenset(
+    {
+        "autopwn",
+        "scan",
+        "findings",
+        "ports",
+        "vulns",
+        "creds",
+        "hashes",
+        "sessions",
+        "save",
+        "report",
+        "status",
+        "stats",
+        "config",
+        "history",
+        "roe",
+        "verify",
+        "suggest",
+        "plan",
+        "conclusion",
+        "verbose",
+        "clear",
+        "mode",
+        "help",
+        "exit",
+        "quit",
+        "abort",
+    }
+)
 
 
 @dataclass(frozen=True)
 class ClassifiedInput:
-    cls     : InputClass
-    command : str           # lower-cased first token (for BUILTIN) or "" 
-    args    : list[str]     # remaining tokens / words
-    raw     : str           # original input, stripped
+    cls: InputClass
+    command: str  # lower-cased first token (for BUILTIN) or ""
+    args: list[str]  # remaining tokens / words
+    raw: str  # original input, stripped
 
     @property
     def tail(self) -> str:
@@ -88,13 +109,13 @@ class CommandRouter:
 
         # /ask prefix — always chat, never tools
         if lower.startswith("/ask"):
-            tail  = text[4:].strip()
+            tail = text[4:].strip()
             parts = tail.split()
             return ClassifiedInput(InputClass.ASK, "/ask", parts, text)
 
         # /run prefix — tool routing allowed
         if lower.startswith("/run"):
-            tail  = text[4:].strip()
+            tail = text[4:].strip()
             parts = tail.split()
             return ClassifiedInput(InputClass.RUN, "/run", parts, text)
 
@@ -103,8 +124,8 @@ class CommandRouter:
             return ClassifiedInput(InputClass.CHAT, "", [], text)
 
         # Check first token against known built-in commands
-        parts  = text.split()
-        first  = parts[0].lower()
+        parts = text.split()
+        first = parts[0].lower()
         if first in BUILTIN_COMMANDS:
             return ClassifiedInput(InputClass.BUILTIN, first, parts[1:], text)
 

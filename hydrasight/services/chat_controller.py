@@ -10,16 +10,18 @@ forbids JSON tool-call output.
 The orchestration AIClient (used by Engine) has its own separate
 message history and is never touched here.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-from hydrasight.services.chat_ai_client import ChatAIClient
 from hydrasight.cli.display import (
-    console, div, info, warn,
+    console,
+    div,
+    warn,
 )
 from hydrasight.config.defaults import P
+from hydrasight.services.chat_ai_client import ChatAIClient
 
 
 class ChatController:
@@ -32,20 +34,21 @@ class ChatController:
 
     def __init__(
         self,
-        ollama_url  : str,
-        model       : str,
+        ollama_url: str,
+        model: str,
         context_size: int,
-        log         : logging.Logger,
+        log: logging.Logger,
+        options: dict | None = None,
     ) -> None:
-        self._ai  = ChatAIClient(ollama_url, model, context_size, log)
+        self._ai = ChatAIClient(ollama_url, model, context_size, log, options=options)
         self._log = log
 
     # ── public API ────────────────────────────────────────────────────────────
 
     def chat(
         self,
-        user_input : str,
-        context    : Optional[str] = None,
+        user_input: str,
+        context: str | None = None,
     ) -> None:
         """
         Send *user_input* to the chat model and print the reply.

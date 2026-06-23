@@ -14,9 +14,10 @@ Design principles:
 - Strategies are registered in a lookup table so new service types
   can be added without modifying the core verifier logic.
 """
+
 import logging
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from hydrasight.integrations.kali_api import KaliAPI
 from hydrasight.models.finding_record import FindingRecord, FindingSeverity
@@ -25,17 +26,29 @@ if TYPE_CHECKING:
     from hydrasight.models.findings import Findings
 
 
+from enum import Enum
+
+
+class VerificationOutcome(str, Enum):
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    NO_STRATEGY = "NO_STRATEGY"
+    ERROR = "ERROR"
+
+
 @dataclass
 class VerificationResult:
     """Outcome of a single verification attempt."""
 
-    finding_id  : str
+    finding_id: str
     finding_name: str
-    verified    : bool
-    confidence  : float
-    command     : str
-    output      : str
-    note        : str
+    verified: bool
+    confidence: float
+    command: str
+    output: str
+    note: str
+    outcome: VerificationOutcome = VerificationOutcome.FAILED
 
 
 # ── strategy registry ─────────────────────────────────────────────────────────
@@ -67,7 +80,6 @@ _VERIFY_STRATEGIES: list[tuple[str, str, str]] = [
         "nmap --script smb-vuln-cve-2007-2447 -p 139 {target} 2>&1",
         "vulnerable",
     ),
-
     # ── FTP ───────────────────────────────────────────────────────────────────
     (
         "anonymous ftp",
@@ -84,21 +96,16 @@ _VERIFY_STRATEGIES: list[tuple[str, str, str]] = [
         "nmap -sV -p {port} {target} 2>&1",
         "proftpd",
     ),
-
     # ── SSH ───────────────────────────────────────────────────────────────────
     (
         "libssh",
         "nmap --script ssh-auth-methods -p {port} {target} 2>&1",
         "none",
     ),
-
     # ── Web ───────────────────────────────────────────────────────────────────
     (
         "directory listing",
-        (
-            "curl -s -m 10 -o /dev/null -w '%{http_code}' "
-            "http://{target}:{port}/{path} 2>&1"
-        ),
+        ("curl -s -m 10 -o /dev/null -w '%{http_code}' http://{target}:{port}/{path} 2>&1"),
         "200",
     ),
     (
@@ -111,7 +118,6 @@ _VERIFY_STRATEGIES: list[tuple[str, str, str]] = [
         "curl -s -m 10 -IL http://{target}:{port}/phpmyadmin/ 2>&1",
         "200",
     ),
-
     # ── Misc services ─────────────────────────────────────────────────────────
     (
         "distcc",
@@ -142,28 +148,24 @@ class VerifierService:
 
     def __init__(
         self,
-        kali   : KaliAPI,
-        log    : logging.Logger,
-        target : str = "",
+        kali: KaliAPI,
+        log: logging.Logger,
+        target: str = "",
     ) -> None:
-        self.kali   = kali
-        self.log    = log
+        self.kali = kali
+        self.log = log
         self.target = target
 
     # ── strategy lookup ───────────────────────────────────────────────────────
 
-    def _find_strategy(
-        self, finding: FindingRecord
-    ) -> Optional[tuple[str, str]]:
+    def _find_strategy(self, finding: FindingRecord) -> tuple[str, str] | None:
         name_lower = finding.name.lower()
         for substring, cmd_template, success_pat in _VERIFY_STRATEGIES:
             if substring in name_lower:
                 return cmd_template, success_pat
         return None
 
-    def _build_command(
-        self, template: str, finding: FindingRecord, target: str
-    ) -> str:
+    def _build_command(self, template: str, finding: FindingRecord, target: str) -> str:
         port = str(finding.port) if finding.port else "80"
         # Extract a path from evidence if this strategy needs one
         path = ""
@@ -172,19 +174,14 @@ class VerifierService:
             if ev_stripped.startswith("/"):
                 path = ev_stripped.lstrip("/")
                 break
-        return (
-            template
-            .replace("{target}", target)
-            .replace("{port}",   port)
-            .replace("{path}",   path)
-        )
+        return template.replace("{target}", target).replace("{port}", port).replace("{path}", path)
 
     # ── single-finding verification ───────────────────────────────────────────
 
     def verify_one(
         self,
-        finding : FindingRecord,
-        target  : Optional[str] = None,
+        finding: FindingRecord,
+        target: str | None = None,
     ) -> VerificationResult:
         """
         Verify a single finding. Returns a VerificationResult.
@@ -192,98 +189,104 @@ class VerifierService:
         """
         tgt = target or self.target
         if not tgt:
-            finding.mark_unverified("no target set for verifier")
+            finding.mark_unverified("no target set for verifier", outcome=VerificationOutcome.ERROR.value)
             return VerificationResult(
-                finding_id   = finding.id,
-                finding_name = finding.name,
-                verified     = False,
-                confidence   = finding.confidence,
-                command      = "",
-                output       = "",
-                note         = "no target provided",
+                finding_id=finding.id,
+                finding_name=finding.name,
+                verified=False,
+                confidence=finding.confidence,
+                command="",
+                output="",
+                note="no target provided",
+                outcome=VerificationOutcome.ERROR
             )
 
         if finding.verification_attempted:
             return VerificationResult(
-                finding_id   = finding.id,
-                finding_name = finding.name,
-                verified     = finding.verified,
-                confidence   = finding.confidence,
-                command      = finding.verification_command,
-                output       = finding.verification_output,
-                note         = "already verified",
+                finding_id=finding.id,
+                finding_name=finding.name,
+                verified=finding.verified,
+                confidence=finding.confidence,
+                command=finding.verification_command,
+                output=finding.verification_output,
+                note="already verified",
+                outcome=VerificationOutcome(finding.verification_outcome) if finding.verification_outcome else VerificationOutcome.FAILED
             )
 
         strategy = self._find_strategy(finding)
         if not strategy:
             note = f"no strategy registered for '{finding.name}'"
-            finding.verification_attempted = True
+            finding.mark_unverified(note, outcome=VerificationOutcome.NO_STRATEGY.value)
             self.log.debug("verifier: %s", note)
             return VerificationResult(
-                finding_id   = finding.id,
-                finding_name = finding.name,
-                verified     = False,
-                confidence   = finding.confidence,
-                command      = "",
-                output       = "",
-                note         = note,
+                finding_id=finding.id,
+                finding_name=finding.name,
+                verified=False,
+                confidence=finding.confidence,
+                command="",
+                output="",
+                note=note,
+                outcome=VerificationOutcome.NO_STRATEGY
             )
 
         cmd_template, success_pat = strategy
         cmd = self._build_command(cmd_template, finding, tgt)
         finding.verification_command = cmd
-        self.log.info(
-            "verifying '%s' via: %s", finding.name, cmd[:100]
-        )
+        self.log.info("verifying '%s' via: %s", finding.name, cmd[:100])
 
         try:
-            result  = self.kali.run(cmd, timeout=60)
-            output  = result.get("output", "")
+            result = self.kali.run(cmd, timeout=60)
+            output = result.get("output", "")
             matched = success_pat in output.lower()
 
             if matched:
                 finding.mark_verified(
-                    confidence = 0.9,
-                    output     = output[:300],
-                    command    = cmd,
+                    confidence=0.9,
+                    output=output[:300],
+                    command=cmd,
+                    rationale=f"verified — pattern '{success_pat}' found",
+                    strategy=success_pat
                 )
-                note = f"verified — pattern '{success_pat}' found"
+                note = finding.verification_rationale
+                outcome = VerificationOutcome.VERIFIED
             else:
-                finding.mark_unverified(
-                    f"pattern '{success_pat}' not in output"
-                )
-                note = "not verified — pattern not matched"
+                finding.mark_unverified(f"pattern '{success_pat}' not in output", outcome=VerificationOutcome.FAILED.value)
+                finding.verification_strategy = success_pat
+                note = finding.verification_rationale
+                outcome = VerificationOutcome.FAILED
 
             return VerificationResult(
-                finding_id   = finding.id,
-                finding_name = finding.name,
-                verified     = matched,
-                confidence   = finding.confidence,
-                command      = cmd,
-                output       = output[:200],
-                note         = note,
+                finding_id=finding.id,
+                finding_name=finding.name,
+                verified=matched,
+                confidence=finding.confidence,
+                command=cmd,
+                output=output[:200],
+                note=note,
+                outcome=outcome
             )
 
         except Exception as exc:  # noqa: BLE001
             self.log.error("verifier error on '%s': %s", finding.name, exc)
-            finding.mark_unverified(f"verification error: {exc}")
+            finding.mark_unverified(f"verification error: {exc}", outcome=VerificationOutcome.ERROR.value)
             return VerificationResult(
-                finding_id   = finding.id,
-                finding_name = finding.name,
-                verified     = False,
-                confidence   = finding.confidence,
-                command      = cmd,
-                output       = "",
-                note         = f"error: {exc}",
+                finding_id=finding.id,
+                finding_name=finding.name,
+                verified=False,
+                confidence=finding.confidence,
+                command=cmd,
+                output="",
+                note=f"error: {exc}",
+                outcome=VerificationOutcome.ERROR
             )
 
     # ── bulk verification ─────────────────────────────────────────────────────
 
     def verify_findings(
         self,
-        findings           : "Findings",
-        target             : Optional[str] = None,
-        only_high_and_above: bool          = True,
+        findings: "Findings",
+        target: str | None = None,
+        only_high_and_above: bool = True,
     ) -> list[VerificationResult]:
         """
         Run verification on all unverified FindingRecords in a Findings object.
@@ -292,21 +295,20 @@ class VerifierService:
             only_high_and_above: If True, only verify CRITICAL and HIGH severity
                                  findings (avoids excessive re-scanning).
         """
-        tgt     = target or self.target or findings.target
-        results : list[VerificationResult] = []
+        tgt = target or self.target or findings.target
+        results: list[VerificationResult] = []
 
         for record in findings.finding_records:
             if record.verification_attempted:
                 continue
             if only_high_and_above and record.severity not in (
-                FindingSeverity.CRITICAL, FindingSeverity.HIGH
+                FindingSeverity.CRITICAL,
+                FindingSeverity.HIGH,
             ):
                 continue
             result = self.verify_one(record, tgt)
             results.append(result)
 
         verified_count = sum(1 for r in results if r.verified)
-        self.log.info(
-            "verification complete: %d/%d confirmed", verified_count, len(results)
-        )
+        self.log.info("verification complete: %d/%d confirmed", verified_count, len(results))
         return results
