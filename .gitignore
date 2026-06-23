@@ -70,3 +70,10 @@ desktop.ini
 # ── Type-checking ─────────────────────────────────────────────────────────────
 .pytype/
 pyrightconfig.json
+# Temporary dev and test outputs
+out_*.txt
+mypy_*.txt
+*_source.txt
+file_on_disk.txt
+shell_init.txt
+test_output.*
