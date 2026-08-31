@@ -12,6 +12,7 @@ class ROECategory(str, Enum):
     REPORT = "REPORT"
     NOTE = "NOTE"
 
+
 @dataclass
 class ActionArgSchema:
     name: str
@@ -20,6 +21,7 @@ class ActionArgSchema:
     default: Any = None
     choices: list[Any] | None = None
     description: str = ""
+
 
 @dataclass
 class ActionDefinition:

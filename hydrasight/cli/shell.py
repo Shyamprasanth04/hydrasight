@@ -266,7 +266,6 @@ class Shell:
     def _show_conclusion(self, value) -> None:  # type: ignore[override]
         self._handlers._show_conclusion = value  # type: ignore[method-assign]
 
-
     # ── readline ──────────────────────────────────────────────────────────────
 
     def _rl_init(self) -> None:

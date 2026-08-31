@@ -18,6 +18,7 @@ class VerificationCoverage:
     supported: int = 0
     unsupported: int = 0
 
+
 @dataclass
 class ReportItem:
     """Normalized presentation-safe finding record for all renderers."""
@@ -65,6 +66,7 @@ class ReportItem:
             "timestamp": self.timestamp,
             "appendix_only": self.appendix_only,
         }
+
 
 @dataclass
 class ReportModel:
@@ -175,7 +177,7 @@ class ReportModel:
             error=sum(1 for r in records if r.verification_outcome == "ERROR"),
             not_applicable=sum(1 for r in records if r.verification_outcome == "NOT_APPLICABLE"),
             supported=len(records) - model.no_strategy_candidate_count,
-            unsupported=model.no_strategy_candidate_count
+            unsupported=model.no_strategy_candidate_count,
         )
 
         return model
@@ -261,7 +263,9 @@ class ReportModel:
                 "verified": [r.to_dict() for r in self.verified_findings],
                 "supported_candidates": [r.to_dict() for r in self.supported_candidates],
                 "no_strategy_candidates": [r.to_dict() for r in self.no_strategy_candidates],
-                "attempted_not_confirmed": [r.to_dict() for r in self.attempted_not_confirmed_findings],
+                "attempted_not_confirmed": [
+                    r.to_dict() for r in self.attempted_not_confirmed_findings
+                ],
                 "appendix_findings": [r.to_dict() for r in self.appendix_findings],
             },
             "environment": {
@@ -271,5 +275,5 @@ class ReportModel:
                 "dirs": self.dirs,
                 "host_info": self.host_info,
                 "timeline": self.timeline,
-            }
+            },
         }

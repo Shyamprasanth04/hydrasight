@@ -1,9 +1,9 @@
-
 from hydrasight.models.actions import ActionDefinition
 
 
 class ActionRegistryError(Exception):
     pass
+
 
 class ActionRegistry:
     def __init__(self):
@@ -17,7 +17,9 @@ class ActionRegistry:
 
         for alias in action.aliases:
             if alias in self._aliases:
-                raise ActionRegistryError(f"Alias '{alias}' already registered to '{self._aliases[alias]}'.")
+                raise ActionRegistryError(
+                    f"Alias '{alias}' already registered to '{self._aliases[alias]}'."
+                )
             self._aliases[alias] = action.action_id
 
     def get(self, action_id_or_alias: str) -> ActionDefinition:
@@ -38,6 +40,7 @@ class ActionRegistry:
     def clear(self) -> None:
         self._actions.clear()
         self._aliases.clear()
+
 
 # Global registry instance
 registry = ActionRegistry()

@@ -66,8 +66,6 @@ def is_conversational(text: str) -> bool:
     return bool(_CONVO_RE.match(text.strip().rstrip("?!.,")))
 
 
-
-
 def route_intent(text: str, target: str | None) -> dict | None:
     """
     Match freeform input against security intent patterns.

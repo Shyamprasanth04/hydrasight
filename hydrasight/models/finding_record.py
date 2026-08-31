@@ -49,11 +49,14 @@ class FindingStage(str, Enum):
 
     @property
     def rank(self) -> int:
-        return {"EXPLOITED": 0, "VERIFIED": 1, "PLAUSIBLE": 2, "OBSERVED": 3, "CANDIDATE": 4}[self.value]
+        return {"EXPLOITED": 0, "VERIFIED": 1, "PLAUSIBLE": 2, "OBSERVED": 3, "CANDIDATE": 4}[
+            self.value
+        ]
 
 
 class VerificationState(str, Enum):
     """Strict canonical reporting vocabulary."""
+
     EXPLOITED = "EXPLOITED"
     VERIFIED = "VERIFIED"
     SUPPORTED_CANDIDATE = "SUPPORTED_CANDIDATE"
@@ -159,7 +162,9 @@ class FindingRecord:
             self.is_pending,
         ]
         if sum(states) != 1:
-            raise RuntimeError(f"Invariant violation: exactly_one_of failed for states: {states} on {self.name}")
+            raise RuntimeError(
+                f"Invariant violation: exactly_one_of failed for states: {states} on {self.name}"
+            )
 
     # ── mutations ─────────────────────────────────────────────────────────────
 
@@ -207,7 +212,7 @@ class FindingRecord:
         output: str = "",
         command: str = "",
         rationale: str = "",
-        strategy: str = ""
+        strategy: str = "",
     ) -> None:
         """Mark finding as independently verified with evidence."""
         self.stage = FindingStage.VERIFIED
@@ -385,7 +390,9 @@ class FindingRecord:
                 rec.verification_state = VerificationState(v_state)
             except ValueError:
                 pass
-        rec.verification_reason_code = data.get("verification_reason_code", rec.verification_reason_code)
+        rec.verification_reason_code = data.get(
+            "verification_reason_code", rec.verification_reason_code
+        )
 
         return rec
 

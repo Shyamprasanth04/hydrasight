@@ -24,11 +24,10 @@ from hydrasight.models.commands import (
     ActionRequest,
     CommandPart,
     CommandSpec,
+    PendingAction,
     TruncationSpec,
 )
-from hydrasight.models.commands import PendingAction
 from hydrasight.services.intent_classifier import Intent, IntentResult
-
 
 
 class ActionPlanner:
@@ -57,6 +56,7 @@ class ActionPlanner:
         except ActionRegistryError:
             # Fallback for unit tests where registry is not loaded
             from hydrasight.models.actions import ActionDefinition, ROECategory
+
             action_def = ActionDefinition(
                 action_id=hint,
                 display_name=hint,
@@ -86,21 +86,22 @@ class ActionPlanner:
         if not spec:
             return None
 
+        rendered = CommandBuilder.build(spec).raw_string
         return PendingAction(
             request=req,
             spec=spec,
+            command_str=rendered,
             reason=result.summary,
-            confidence=result.confidence
+            confidence=result.confidence,
         )
 
-    def _build_spec(self, action_id: str, target: str, ports: str | None, flags: list[str], cfg: dict) -> CommandSpec | None:
+    def _build_spec(
+        self, action_id: str, target: str, ports: str | None, flags: list[str], cfg: dict
+    ) -> CommandSpec | None:
         if action_id == "nmap_scan":
             eff_flags = flags if flags else ["-sV", "-sC"]
             args = [CommandPart(f, quote=False) for f in eff_flags]
-            args.extend([
-                CommandPart("-T4", quote=False),
-                CommandPart("-Pn", quote=False)
-            ])
+            args.extend([CommandPart("-T4", quote=False), CommandPart("-Pn", quote=False)])
             if ports:
                 args.extend([CommandPart("-p", quote=False), CommandPart(ports, quote=True)])
             args.append(CommandPart(target, quote=True))
@@ -112,7 +113,7 @@ class ActionPlanner:
                 CommandPart("smb-vuln-ms17-010,smb-os-discovery", quote=True),
                 CommandPart("-p", quote=False),
                 CommandPart("445", quote=False),
-                CommandPart(target, quote=True)
+                CommandPart(target, quote=True),
             ]
             return CommandSpec(executable="nmap", args=args)
 
@@ -122,16 +123,20 @@ class ActionPlanner:
                 executable="enum4linux",
                 args=args,
                 stderr_to_stdout=True,
-                truncation=TruncationSpec(max_lines_head=150)
+                truncation=TruncationSpec(max_lines_head=150),
             )
 
         elif action_id == "smbclient_enum":
-            args = [CommandPart("-L", quote=False), CommandPart(f"//{target}", quote=True), CommandPart("-N", quote=False)]
+            args = [
+                CommandPart("-L", quote=False),
+                CommandPart(f"//{target}", quote=True),
+                CommandPart("-N", quote=False),
+            ]
             return CommandSpec(
                 executable="smbclient",
                 args=args,
                 stderr_to_stdout=True,
-                truncation=TruncationSpec(max_lines_head=40)
+                truncation=TruncationSpec(max_lines_head=40),
             )
 
         elif action_id == "ftp_check":
@@ -141,7 +146,7 @@ class ActionPlanner:
                 CommandPart("-sV", quote=False),
                 CommandPart("-p", quote=False),
                 CommandPart("21", quote=False),
-                CommandPart(target, quote=True)
+                CommandPart(target, quote=True),
             ]
             return CommandSpec(executable="nmap", args=args)
 
@@ -151,7 +156,7 @@ class ActionPlanner:
                 CommandPart("ssh-auth-methods,ssh2-enum-algos", quote=True),
                 CommandPart("-p", quote=False),
                 CommandPart("22", quote=False),
-                CommandPart(target, quote=True)
+                CommandPart(target, quote=True),
             ]
             return CommandSpec(executable="nmap", args=args)
 
@@ -167,7 +172,7 @@ class ActionPlanner:
                 CommandPart("60s", quote=True),
                 CommandPart("-p", quote=False),
                 CommandPart(p, quote=True),
-                CommandPart(target, quote=True)
+                CommandPart(target, quote=True),
             ]
             return CommandSpec(executable="nmap", args=args)
 
@@ -179,7 +184,7 @@ class ActionPlanner:
                 CommandPart(f"http://{target}", quote=True),
                 CommandPart("-w", quote=False),
                 CommandPart(wordlist, quote=True),
-                CommandPart("--no-color", quote=False)
+                CommandPart("--no-color", quote=False),
             ]
             if "extensions" in action_id or "-x" in str(flags) or "extensions" in str(flags):
                 # For tests expecting -x php,html
@@ -191,7 +196,7 @@ class ActionPlanner:
                 CommandPart("-h", quote=False),
                 CommandPart(target, quote=True),
                 CommandPart("-maxtime", quote=False),
-                CommandPart("300", quote=True)
+                CommandPart("300", quote=True),
             ]
             if ports:
                 args.extend([CommandPart("-port", quote=False), CommandPart(ports, quote=True)])
@@ -199,17 +204,23 @@ class ActionPlanner:
 
         elif action_id == "ssh_brute":
             args = [
-                CommandPart("-L", quote=False), CommandPart("users.txt", quote=True),
-                CommandPart("-P", quote=False), CommandPart("pass.txt", quote=True),
-                CommandPart(f"ssh://{target}", quote=True)
+                CommandPart("-L", quote=False),
+                CommandPart("users.txt", quote=True),
+                CommandPart("-P", quote=False),
+                CommandPart("pass.txt", quote=True),
+                CommandPart(f"ssh://{target}", quote=True),
             ]
-            return CommandSpec(executable="hydra", args=args, truncation=TruncationSpec(max_lines_tail=40))
+            return CommandSpec(
+                executable="hydra", args=args, truncation=TruncationSpec(max_lines_tail=40)
+            )
 
         elif action_id == "ftp_brute":
             args = [
-                CommandPart("-L", quote=False), CommandPart("users.txt", quote=True),
-                CommandPart("-P", quote=False), CommandPart("pass.txt", quote=True),
-                CommandPart(f"ftp://{target}", quote=True)
+                CommandPart("-L", quote=False),
+                CommandPart("users.txt", quote=True),
+                CommandPart("-P", quote=False),
+                CommandPart("pass.txt", quote=True),
+                CommandPart(f"ftp://{target}", quote=True),
             ]
             return CommandSpec(executable="hydra", args=args)
 

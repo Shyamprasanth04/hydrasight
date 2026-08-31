@@ -10,6 +10,7 @@ from hydrasight.models.commands import (
 class CommandBuilderError(Exception):
     pass
 
+
 class CommandBuilder:
     @staticmethod
     def _quote(part: CommandPart) -> str:
@@ -25,13 +26,17 @@ class CommandBuilder:
 
         if not spec.executable:
             errors.append("Command specification missing executable")
-            return RenderedCommand(raw_string="", spec=spec, is_safe=False, validation_errors=errors)
+            return RenderedCommand(
+                raw_string="", spec=spec, is_safe=False, validation_errors=errors
+            )
 
         parts.append(CommandBuilder._quote(CommandPart(spec.executable, quote=True)))
 
         for arg in spec.args:
             # Prevent injection of shell meta-characters if not quoted
-            if not arg.quote and any(c in arg.value for c in ['|', '>', '<', '&', ';', '$', '`', '\n']):
+            if not arg.quote and any(
+                c in arg.value for c in ["|", ">", "<", "&", ";", "$", "`", "\n"]
+            ):
                 errors.append(f"Unquoted argument contains shell metacharacters: {arg.value}")
 
             parts.append(CommandBuilder._quote(arg))
@@ -60,19 +65,23 @@ class CommandBuilder:
                 parts.append(f"-n {spec.truncation.max_lines_tail}")
 
         for redir in spec.redirects:
-             operator = ">>" if redir.append else ">"
-             fd_prefix = str(redir.fd) if redir.fd != 1 else ""
-             parts.append(f"{fd_prefix}{operator} {shlex.quote(redir.target)}")
+            operator = ">>" if redir.append else ">"
+            fd_prefix = str(redir.fd) if redir.fd != 1 else ""
+            parts.append(f"{fd_prefix}{operator} {shlex.quote(redir.target)}")
 
         # Join the command
         raw_string = " ".join(parts)
 
         # Verify no rogue "21" suffix exists due to malformed stderr redirects
         if " 21 " in f" {raw_string} " or raw_string.endswith(" 21"):
-            errors.append("Detected malformed '21' suffix. This is typically a broken '2>&1' redirect.")
+            errors.append(
+                "Detected malformed '21' suffix. This is typically a broken '2>&1' redirect."
+            )
 
         is_safe = len(errors) == 0
-        return RenderedCommand(raw_string=raw_string, spec=spec, is_safe=is_safe, validation_errors=errors)
+        return RenderedCommand(
+            raw_string=raw_string, spec=spec, is_safe=is_safe, validation_errors=errors
+        )
 
     @staticmethod
     def normalize_flag(flag: str) -> str:

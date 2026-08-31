@@ -306,8 +306,6 @@ def _extract_flags(text: str) -> list[str]:
     return flags
 
 
-
-
 def _tool_hint(text: str) -> str | None:
     if _PWND_WORDS.search(text):
         return "autopwn"

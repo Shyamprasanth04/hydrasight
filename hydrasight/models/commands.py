@@ -7,21 +7,25 @@ class CommandPart:
     value: str
     quote: bool = True
 
+
 @dataclass
 class RedirectSpec:
     target: str
     append: bool = False
-    fd: int = 1 # 1 for stdout, 2 for stderr
+    fd: int = 1  # 1 for stdout, 2 for stderr
+
 
 @dataclass
 class PipeSpec:
     command: str
     args: list[str] = field(default_factory=list)
 
+
 @dataclass
 class TruncationSpec:
     max_lines_head: int | None = None
     max_lines_tail: int | None = None
+
 
 @dataclass
 class CommandSpec:
@@ -33,12 +37,14 @@ class CommandSpec:
     truncation: TruncationSpec | None = None
     stderr_to_stdout: bool = False
 
+
 @dataclass
 class RenderedCommand:
     raw_string: str
     spec: CommandSpec
     is_safe: bool = True
     validation_errors: list[str] = field(default_factory=list)
+
 
 @dataclass
 class ActionRequest:
@@ -48,6 +54,7 @@ class ActionRequest:
     profile: str | None = None
     custom_flags: list[str] = field(default_factory=list)
     is_raw_mode: bool = False
+
 
 @dataclass
 class PendingAction:
@@ -77,6 +84,11 @@ class PendingAction:
                 args = [CommandPart(command_str, quote=False)]
             self.spec = CommandSpec(executable="legacy", args=args)
 
+        # The rendered shell command is supplied by the planner / caller so
+        # that the model layer does not depend on the core command builder
+        # (which would create a cyclic import).
+        self._rendered_command = command_str
+
         # Legacy compatibility properties
         self._legacy_tool_hint = tool_hint
         self._legacy_target = target
@@ -89,11 +101,12 @@ class PendingAction:
 
     @property
     def command_str(self) -> str:
-        legacy = getattr(self, "_legacy_command_str", None)
-        if legacy is not None:
-            return str(legacy)
-        from hydrasight.core.command_builder import CommandBuilder
-        return CommandBuilder.build(self.spec).raw_string
+        # Prefer a command rendered and provided by the caller.
+        rendered = getattr(self, "_rendered_command", None)
+        if rendered is not None:
+            return str(rendered)
+        # Fallback for legacy dict-constructed actions: join any literal parts.
+        return " ".join(p.value for p in self.spec.args if p.value)
 
     @property
     def tool_hint(self) -> str:
@@ -116,10 +129,11 @@ class PendingAction:
         legacy = getattr(self, "_legacy_tool_call", None)
         if legacy is not None:
             from typing import cast
+
             return cast(dict, legacy)
         return {
             "tool": self.request.action_id,
-            "args": {"target": self.request.target, **self.request.args}
+            "args": {"target": self.request.target, **self.request.args},
         }
 
     @property
@@ -131,6 +145,7 @@ class PendingAction:
             f"  reason  : {getattr(self, 'reason', '')}\n"
             f"  confidence: {getattr(self, 'confidence', 0.0):.0%}"
         )
+
 
 @dataclass
 class ExecutionRequest:

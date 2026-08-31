@@ -111,8 +111,13 @@ class TestAIClientOptions:
         with patch.object(client.sess, "post", return_value=resp) as mock_post:
             client.ask("scan 192.168.1.1")
         payload = mock_post.call_args[1]["json"]
-        assert payload["options"]["temperature"] == _DEFAULT_OLLAMA_OPTIONS_ORCHESTRATOR["temperature"]
-        assert payload["options"]["repeat_penalty"] == _DEFAULT_OLLAMA_OPTIONS_ORCHESTRATOR["repeat_penalty"]
+        assert (
+            payload["options"]["temperature"] == _DEFAULT_OLLAMA_OPTIONS_ORCHESTRATOR["temperature"]
+        )
+        assert (
+            payload["options"]["repeat_penalty"]
+            == _DEFAULT_OLLAMA_OPTIONS_ORCHESTRATOR["repeat_penalty"]
+        )
         assert payload["options"]["think"] is False
 
     def test_custom_options_override_defaults(self):
@@ -156,7 +161,9 @@ class TestChatAIClientOptions:
             client.ask("hi")
         payload = mock_post.call_args[1]["json"]
         assert payload["options"]["temperature"] == _DEFAULT_OLLAMA_OPTIONS_CHAT["temperature"]
-        assert payload["options"]["repeat_penalty"] == _DEFAULT_OLLAMA_OPTIONS_CHAT["repeat_penalty"]
+        assert (
+            payload["options"]["repeat_penalty"] == _DEFAULT_OLLAMA_OPTIONS_CHAT["repeat_penalty"]
+        )
 
     def test_custom_options_override_defaults(self):
         client = self._make_client(options={"temperature": 0.5})

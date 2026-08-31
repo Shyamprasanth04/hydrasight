@@ -21,8 +21,8 @@ def _model_base(model: str) -> str:
       'qwen2.5:7b'                              -> 'qwen2.5'
       'llama3.1:8b-instruct-q4_k_m'            -> 'llama3.1'
     """
-    base = model.split(":")[0]   # strip :tag
-    base = base.split("/")[-1]   # strip namespace/
+    base = model.split(":")[0]  # strip :tag
+    base = base.split("/")[-1]  # strip namespace/
     return base.lower()
 
 
@@ -62,11 +62,7 @@ class AIClient:
             models = [m["name"] for m in r.json().get("models", [])]
             # Exact match first; then loose base-name match to handle namespaced tags
             match = next(
-                (
-                    m
-                    for m in models
-                    if m == self.model or _model_base(m) == _model_base(self.model)
-                ),
+                (m for m in models if m == self.model or _model_base(m) == _model_base(self.model)),
                 None,
             )
             if match:

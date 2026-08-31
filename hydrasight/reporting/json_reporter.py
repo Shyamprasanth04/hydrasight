@@ -18,7 +18,7 @@ def save_json(findings: Findings, path: str) -> bool:
         # Build structured output
         out = {
             "reporting": ReportModel.from_findings(findings).to_dict(),
-            "_deprecated_legacy_raw": findings.to_dict()  # compatibility only, do not use for new consumers
+            "_deprecated_legacy_raw": findings.to_dict(),  # compatibility only, do not use for new consumers
         }
 
         with open(path, "w", encoding="utf-8") as fh:

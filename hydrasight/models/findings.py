@@ -218,14 +218,16 @@ class Findings:
         bytes_out: int = 0,
     ) -> None:
         with self.__lock:
-            self.timeline.append({
-                "phase": phase,
-                "event": event,
-                "tool": tool,
-                "outcome": outcome,
-                "bytes_out": bytes_out,
-                "ts": ts(),
-            })
+            self.timeline.append(
+                {
+                    "phase": phase,
+                    "event": event,
+                    "tool": tool,
+                    "outcome": outcome,
+                    "bytes_out": bytes_out,
+                    "ts": ts(),
+                }
+            )
 
     # ── computed properties ───────────────────────────────────────────────────
 
@@ -263,7 +265,9 @@ class Findings:
     @property
     def potential_risk(self) -> str:
         """Risk derived from unverified CANDIDATE, OBSERVED, PLAUSIBLE findings."""
-        unverified = self.candidate_findings() + self.observed_findings() + self.plausible_findings()
+        unverified = (
+            self.candidate_findings() + self.observed_findings() + self.plausible_findings()
+        )
         sevs = [f.severity for f in unverified]
         if "CRITICAL" in sevs:
             return "CRITICAL"
@@ -297,28 +301,40 @@ class Findings:
 
     @property
     def has_data(self) -> bool:
-        return bool(self.ports or self.vulns or self.hashes or self.credentials or self.dirs or self.finding_records)
+        return bool(
+            self.ports
+            or self.vulns
+            or self.hashes
+            or self.credentials
+            or self.dirs
+            or self.finding_records
+        )
 
     # ── Phase 4 properties ────────────────────────────────────────────────────
 
     def candidate_findings(self) -> list["FindingRecord"]:
         from hydrasight.models.finding_record import FindingStage
+
         return [r for r in self.finding_records if r.stage == FindingStage.CANDIDATE]
 
     def observed_findings(self) -> list["FindingRecord"]:
         from hydrasight.models.finding_record import FindingStage
+
         return [r for r in self.finding_records if r.stage == FindingStage.OBSERVED]
 
     def plausible_findings(self) -> list["FindingRecord"]:
         from hydrasight.models.finding_record import FindingStage
+
         return [r for r in self.finding_records if r.stage == FindingStage.PLAUSIBLE]
 
     def verified_findings(self) -> list["FindingRecord"]:
         from hydrasight.models.finding_record import FindingStage
+
         return [r for r in self.finding_records if r.stage == FindingStage.VERIFIED]
 
     def exploited_findings(self) -> list["FindingRecord"]:
         from hydrasight.models.finding_record import FindingStage
+
         return [r for r in self.finding_records if r.stage == FindingStage.EXPLOITED]
 
     def findings_by_severity(self, severity: str) -> list["FindingRecord"]:
@@ -329,10 +345,20 @@ class Findings:
 
     def reportable_findings(self) -> dict[str, list["FindingRecord"]]:
         """Group findings into priority buckets for reporting."""
-        unverified = self.candidate_findings() + self.observed_findings() + self.plausible_findings()
+        unverified = (
+            self.candidate_findings() + self.observed_findings() + self.plausible_findings()
+        )
 
-        unverified_supported = [f for f in unverified if f.verification_attempted and f.verification_outcome != "NO_STRATEGY"]
-        unverified_no_strategy = [f for f in unverified if not f.verification_attempted or f.verification_outcome == "NO_STRATEGY"]
+        unverified_supported = [
+            f
+            for f in unverified
+            if f.verification_attempted and f.verification_outcome != "NO_STRATEGY"
+        ]
+        unverified_no_strategy = [
+            f
+            for f in unverified
+            if not f.verification_attempted or f.verification_outcome == "NO_STRATEGY"
+        ]
 
         return {
             "exploited": sorted(self.exploited_findings(), key=lambda x: x.severity_rank),
@@ -344,12 +370,23 @@ class Findings:
     @property
     def verified_count(self) -> int:
         from hydrasight.models.finding_record import FindingStage
-        return sum(1 for r in self.finding_records if r.stage in (FindingStage.VERIFIED, FindingStage.EXPLOITED))
+
+        return sum(
+            1
+            for r in self.finding_records
+            if r.stage in (FindingStage.VERIFIED, FindingStage.EXPLOITED)
+        )
 
     @property
     def unverified_count(self) -> int:
         from hydrasight.models.finding_record import FindingStage
-        return sum(1 for r in self.finding_records if r.stage not in (FindingStage.VERIFIED, FindingStage.EXPLOITED) and r.verification_attempted)
+
+        return sum(
+            1
+            for r in self.finding_records
+            if r.stage not in (FindingStage.VERIFIED, FindingStage.EXPLOITED)
+            and r.verification_attempted
+        )
 
     @property
     def high_confidence_findings(self) -> list["FindingRecord"]:

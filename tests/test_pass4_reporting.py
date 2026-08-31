@@ -1,4 +1,3 @@
-
 from hydrasight.models.finding_record import FindingRecord, FindingSeverity, FindingStage
 from hydrasight.models.findings import Findings
 from hydrasight.models.report_model import ReportModel

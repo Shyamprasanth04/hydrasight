@@ -13,7 +13,8 @@
 
 [![Version](https://img.shields.io/badge/version-4.0.0-blue?style=for-the-badge&logo=github)](https://github.com/Shyamprasanth04/hydrasight/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-393%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
+[![Tests](https://img.shields.io/badge/tests-665%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
+[![CI](https://img.shields.io/badge/CI-ruff%20%7C%20mypy%20%7C%20pylint-success?style=for-the-badge)](./.github/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge)](./LICENSE)
 [![Ollama](https://img.shields.io/badge/AI-Ollama%20%28local%29-ff6b35?style=for-the-badge&logo=llama&logoColor=white)](https://ollama.com/)
 [![Kali Linux](https://img.shields.io/badge/backend-Kali%20Linux%20MCP-557C94?style=for-the-badge&logo=kalilinux&logoColor=white)](https://www.kali.org/)
@@ -66,7 +67,8 @@ hydrasight › enumerate smb shares on 10.129.74.47
 | **Findings State** | Shared mutable state: ports, vulns, credentials, hashes, sessions, dirs, timeline |
 | **Reporting** | Auto-generated JSON + PDF reports via ReportLab |
 | **UI** | Rich terminal panels, tables, spinners — full REPL with history |
-| **Test Suite** | 393 pytest tests, all offline, all mocked — no network required |
+| **Test Suite** | 665 pytest tests, all offline, all mocked — no network required |
+| **CI Gates** | `ruff` lint+format, `mypy` strict-ish types, `pylint` ≥ 9.0, pytest + coverage |
 
 ---
 
@@ -149,6 +151,9 @@ The `IntentClassifier` uses pure regex pattern matching — no LLM inference:
 
 ## Supported Tool Actions
 
+Every action is whitelisted in the registry and rendered through a typed
+`CommandSpec` — there is no raw shell passthrough.
+
 | Action ID | Tool Executed | Description |
 |---|---|---|
 | `nmap_scan` | `nmap -sV -sC` | Service version + default script scan |
@@ -159,7 +164,19 @@ The `IntentClassifier` uses pure regex pattern matching — no LLM inference:
 | `ssh_check` | `nmap -p 22 --script ssh*` | SSH version + key exchange audit |
 | `vuln_scan` | `nmap --script vuln` | Generic vulnerability script scan |
 | `dir_enum` | `gobuster dir` | Web directory brute-force |
+| `gobuster_scan` | `gobuster dir` | Gobuster scan driven by URL/wordlist args |
+| `nikto_scan` | `nikto -h` | Web server vulnerability scan |
+| `whatweb_scan` | `whatweb` | Web technology fingerprinting |
+| `ssh_brute` | `hydra ssh://` | SSH credential brute-force |
+| `ftp_brute` | `hydra ftp://` | FTP credential brute-force |
+| `run_command` | allowlisted binaries | Internal use only — credential reuse / john hash cracking |
+| `post_exploit` | `msfconsole` (RC via base64) | Metasploit exploit/auxiliary execution |
 | `autopwn` | Engine orchestration | Full adaptive engagement sequence |
+
+> **Note:** `run_command` and `post_exploit` are invoked internally by the
+> engine/post-access handlers, never proposed directly from natural language.
+> `run_command` is restricted to a fixed binary allowlist
+> (nmap, gobuster, nikto, hydra, msfconsole, smbclient, sshpass, john, curl, …).
 
 ---
 
@@ -218,7 +235,7 @@ hydrasight/
 │   └── utils/
 │       ├── ip_utils.py           # IP validation, force_ip(), CIDR helpers
 │       └── time_utils.py         # Elapsed time formatting
-├── tests/                        # 393 pytest tests — all offline
+├── tests/                        # 665 pytest tests — all offline
 │   ├── test_nl_pipeline.py       # 31 tests — NL intent classification
 │   ├── test_command_router.py    # CommandRouter classification
 │   ├── test_command_sanitizer.py # Security gate validation
@@ -239,8 +256,8 @@ hydrasight/
 │   ├── test_ip_utils.py          # IP utility functions
 │   ├── test_post_access.py       # Post-exploitation handlers
 │   └── test_registry.py          # Action registry
-├── hydrasight.json               # Runtime configuration
-├── hydrasight.json.example       # Example config template
+├── hydrasight.json               # Runtime config (git-ignored — copied from example)
+├── hydrasight.json.example       # Commit-safe config template
 ├── pyproject.toml                # Package definition + tool config
 └── README.md
 ```
@@ -274,9 +291,14 @@ pip install -e ".[dev]"
 # Start the Ollama server (runs locally)
 ollama serve
 
-# Pull the default model (~4.7 GB)
-ollama pull qwen2.5:7b
+# Pull the default model (Qwen3 8B, Q4_K_M quantisation, ~5 GB)
+ollama pull qcwind/qwen3-8b-instruct-Q4-K-M:latest
 ```
+
+> Any Ollama-hosted chat model works — override with the `model` key in
+> `hydrasight.json` or the `HYDRA_MODEL` environment variable. The
+> orchestrator runs with low temperature (`think: false`) for reliable
+> tool-call extraction; the chat client uses a slightly higher temperature.
 
 ### 3. Start the Kali MCP Server
 
@@ -286,7 +308,7 @@ On your Kali Linux VM or host:
 # Install if not present
 pip install kali-linux-mcp
 
-# Start the MCP server (default: http://0.0.0.0:8000)
+# Start the MCP server (default: http://0.0.0.0:5000)
 kali-linux-mcp --transport sse
 ```
 
@@ -303,11 +325,14 @@ Key fields to update:
 ```json
 {
   "ollama_url":   "http://localhost:11434",
-  "kali_api_url": "http://<kali-vm-ip>:8000",
-  "model":        "qwen2.5:7b",
+  "kali_api_url": "http://<kali-vm-ip>:5000",
+  "model":        "qcwind/qwen3-8b-instruct-Q4-K-M:latest",
   "execution_mode": "confirm"
 }
 ```
+
+> `hydrasight.json` is git-ignored (it may contain lab IPs). Commit-safe
+> defaults live in `hydrasight.json.example`.
 
 ### 5. Launch
 
@@ -388,21 +413,24 @@ hydrasight › mode never      # Explains and suggests only — safe for demos
 
 ### Rules of Engagement
 
-Create a `hydrasight.roe.json` file in your project root to enforce per-engagement constraints:
+Create a `hydrasight.roe.json` file in your project root to enforce per-engagement constraints (this file is git-ignored — it is target-specific):
 
 ```json
 {
   "allowed_targets": ["10.129.74.0/24", "192.168.56.0/24"],
   "blocked_ports":   [22],
   "blocked_modules": ["exploit/windows/smb/ms08_067_netapi"],
-  "require_approval_for": ["post_exploit", "autopwn"],
+  "require_approval_for": ["EXPLOIT", "POST_EXPLOIT"],
   "max_runtime_minutes": 60,
   "max_threads": 4,
   "kill_switch": false
 }
 ```
 
-Every action is validated against the ROE before dispatch. Actions targeting out-of-scope hosts are blocked and logged.
+Phase IDs used in `require_approval_for` are uppercase: `RECON`, `FTP_CHECK`,
+`SMB_CHECK`, `SSH_CHECK`, `WEB_*`, `VULN_SCAN`, `EXPLOIT`, `POST_EXPLOIT`,
+`HASH_CRACK`. Every action is validated against the ROE before dispatch.
+Actions targeting out-of-scope hosts are blocked and logged.
 
 ---
 
@@ -413,8 +441,8 @@ HydraSight merges configuration in priority order: **environment variables > `.e
 | Key | Default | Description |
 |---|---|---|
 | `ollama_url` | `http://localhost:11434` | Ollama API endpoint |
-| `kali_api_url` | `http://localhost:8000` | Kali MCP server URL |
-| `model` | `qwen2.5:7b` | Ollama model name |
+| `kali_api_url` | `http://127.0.0.1:5000` | Kali MCP server URL |
+| `model` | `qcwind/qwen3-8b-instruct-Q4-K-M:latest` | Ollama model name |
 | `context_size` | `8192` | LLM context window (tokens) |
 | `max_retries` | `3` | API call retry limit |
 | `retry_delay` | `2` | Seconds between retries |
@@ -423,7 +451,7 @@ HydraSight merges configuration in priority order: **environment variables > `.e
 | `output_dir` | `hydrasight_output/` | Report and artifact output directory |
 | `lport` | `4444` | Local listener port for reverse shells |
 | `token_budget` | `6000` | Max tokens per LLM context window |
-| `auto_pdf` | `false` | Auto-generate PDF at session end |
+| `auto_pdf` | `true` | Auto-generate PDF at session end |
 | `auto_save` | `true` | Auto-save findings JSON periodically |
 | `scan_range` | `"1-1000"` | Default nmap port range |
 | `deep_scan_range` | `"1-65535"` | Deep scan port range |
@@ -434,8 +462,8 @@ HydraSight merges configuration in priority order: **environment variables > `.e
 **Environment variable overrides:**
 
 ```bash
-export HYDRA_KALI_URL="http://192.168.56.10:8000"
-export HYDRA_MODEL="llama3.1:8b"
+export HYDRA_KALI_URL="http://192.168.56.10:5000"
+export HYDRA_MODEL="qcwind/qwen3-8b-instruct-Q4-K-M:latest"
 export HYDRA_VERBOSITY=2
 ```
 
@@ -443,7 +471,7 @@ export HYDRA_VERBOSITY=2
 
 ## Tests
 
-HydraSight has **393 pytest tests** — all fully offline, all network calls mocked.
+HydraSight has **665 pytest tests** — all fully offline, all network calls mocked.
 
 ```bash
 # Run full test suite
@@ -460,26 +488,27 @@ python -m pytest tests/test_nl_pipeline.py -v
 
 | Test File | Tests | Coverage Area |
 |---|---|---|
-| `test_nl_pipeline.py` | 31 | NL intent classification end-to-end |
-| `test_command_router.py` | — | CommandRouter BUILTIN/CHAT/NL classification |
-| `test_command_sanitizer.py` | — | Security gate: tool call + built command validation |
-| `test_phase4.py` | — | Full engagement flow integration |
-| `test_roe.py` | — | Rules of Engagement enforcement |
-| `test_finding_record.py` | — | FindingRecord lifecycle (PLAUSIBLE → VERIFIED → EXPLOITED) |
-| `test_planner_state.py` | — | Multi-step PlannerState transitions |
-| `test_dispatcher.py` | — | Command building from ActionRequest/PendingAction |
-| `test_parser.py` | — | Tool output parsing (nmap, enum4linux, gobuster…) |
-| `test_pass3_refactor.py` | — | NL phrase → correct action ID routing |
-| `test_pass4_reporting.py` | — | ReportModel normalization, finding buckets |
-| `test_shell_refactor.py` | — | Shell handler + renderer integration |
-| `test_ai_client_options.py` | — | AIClient configuration and streaming |
-| `test_command_builder.py` | — | CommandSpec → safe shell string rendering |
-| `test_context_builder.py` | — | LLM context window truncation |
-| `test_exploit_suggestion.py` | — | Confidence-scored exploit ranking |
-| `test_findings.py` | — | Findings container CRUD and separation |
-| `test_ip_utils.py` | — | IP normalization, force_ip(), CIDR |
-| `test_post_access.py` | — | Post-exploitation handler flows |
-| `test_registry.py` | — | Action registry lookup and resolution |
+| `test_command_sanitizer.py` | 134 | Security gate: tool call + built command validation |
+| `test_command_router.py` | 84 | CommandRouter BUILTIN/CHAT/NL classification |
+| `test_phase4.py` | 41 | Planner / post-access handler integration |
+| `test_nl_pipeline.py` | 34 | NL intent classification end-to-end |
+| `test_parser.py` | 35 | Tool output parsing (nmap, enum4linux, gobuster…) |
+| `test_exploit_suggestion.py` | 33 | Confidence-scored exploit ranking |
+| `test_engine.py` | 27 | Engagement engine: recon, planning, exploit, hash crack, ROE |
+| `test_ai_client_options.py` | 27 | AIClient configuration and streaming |
+| `test_finding_record.py` | 30 | FindingRecord lifecycle (CANDIDATE → VERIFIED → EXPLOITED) |
+| `test_planner_state.py` | 28 | Multi-step PlannerState transitions |
+| `test_shell_refactor.py` | 34 | Shell handler + renderer integration |
+| `test_findings.py` | 25 | Findings container CRUD and separation |
+| `test_context_builder.py` | 23 | LLM context window truncation |
+| `test_post_access.py` | 23 | Post-exploitation handler flows |
+| `test_ip_utils.py` | 19 | IP normalization, force_ip(), CIDR |
+| `test_roe.py` | 30 | Rules of Engagement enforcement |
+| `test_dispatcher.py` | 14 | Command building + unified dispatch path |
+| `test_command_builder.py` | 6 | CommandSpec → safe shell string rendering |
+| `test_pass3_refactor.py` | 8 | NL phrase → correct action ID routing |
+| `test_pass4_reporting.py` | 5 | ReportModel normalization, finding buckets |
+| `test_registry.py` | 5 | Action registry lookup and resolution |
 
 > **Note:** The `-p no:ethereum` flag suppresses an unrelated `web3` pytest plugin import error present in some environments.
 
@@ -574,9 +603,9 @@ Contributions are welcome! Please read `CONTRIBUTING.md` for the full guide.
 
 ```bash
 ruff check hydrasight/ tests/
-black --check hydrasight/ tests/
-isort --check hydrasight/ tests/
-mypy hydrasight/
+ruff format --check hydrasight/ tests/
+pylint hydrasight/ --fail-under=9.0
+mypy hydrasight/ --ignore-missing-imports
 python -m pytest tests/ -q -p no:ethereum
 ```
 
