@@ -189,7 +189,9 @@ class VerifierService:
         """
         tgt = target or self.target
         if not tgt:
-            finding.mark_unverified("no target set for verifier", outcome=VerificationOutcome.ERROR.value)
+            finding.mark_unverified(
+                "no target set for verifier", outcome=VerificationOutcome.ERROR.value
+            )
             return VerificationResult(
                 finding_id=finding.id,
                 finding_name=finding.name,
@@ -198,7 +200,7 @@ class VerifierService:
                 command="",
                 output="",
                 note="no target provided",
-                outcome=VerificationOutcome.ERROR
+                outcome=VerificationOutcome.ERROR,
             )
 
         if finding.verification_attempted:
@@ -210,7 +212,9 @@ class VerifierService:
                 command=finding.verification_command,
                 output=finding.verification_output,
                 note="already verified",
-                outcome=VerificationOutcome(finding.verification_outcome) if finding.verification_outcome else VerificationOutcome.FAILED
+                outcome=VerificationOutcome(finding.verification_outcome)
+                if finding.verification_outcome
+                else VerificationOutcome.FAILED,
             )
 
         strategy = self._find_strategy(finding)
@@ -226,7 +230,7 @@ class VerifierService:
                 command="",
                 output="",
                 note=note,
-                outcome=VerificationOutcome.NO_STRATEGY
+                outcome=VerificationOutcome.NO_STRATEGY,
             )
 
         cmd_template, success_pat = strategy
@@ -245,12 +249,15 @@ class VerifierService:
                     output=output[:300],
                     command=cmd,
                     rationale=f"verified — pattern '{success_pat}' found",
-                    strategy=success_pat
+                    strategy=success_pat,
                 )
                 note = finding.verification_rationale
                 outcome = VerificationOutcome.VERIFIED
             else:
-                finding.mark_unverified(f"pattern '{success_pat}' not in output", outcome=VerificationOutcome.FAILED.value)
+                finding.mark_unverified(
+                    f"pattern '{success_pat}' not in output",
+                    outcome=VerificationOutcome.FAILED.value,
+                )
                 finding.verification_strategy = success_pat
                 note = finding.verification_rationale
                 outcome = VerificationOutcome.FAILED
@@ -263,12 +270,14 @@ class VerifierService:
                 command=cmd,
                 output=output[:200],
                 note=note,
-                outcome=outcome
+                outcome=outcome,
             )
 
         except Exception as exc:  # noqa: BLE001
             self.log.error("verifier error on '%s': %s", finding.name, exc)
-            finding.mark_unverified(f"verification error: {exc}", outcome=VerificationOutcome.ERROR.value)
+            finding.mark_unverified(
+                f"verification error: {exc}", outcome=VerificationOutcome.ERROR.value
+            )
             return VerificationResult(
                 finding_id=finding.id,
                 finding_name=finding.name,
@@ -277,7 +286,7 @@ class VerifierService:
                 command=cmd,
                 output="",
                 note=f"error: {exc}",
-                outcome=VerificationOutcome.ERROR
+                outcome=VerificationOutcome.ERROR,
             )
 
     # ── bulk verification ─────────────────────────────────────────────────────

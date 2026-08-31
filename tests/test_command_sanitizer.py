@@ -274,9 +274,7 @@ class TestNmapScanValidator:
         assert "invalid target IP" in r.reason
 
     def test_invalid_ports(self):
-        r = validate_nmap_scan(
-            {"target": "192.168.1.10", "ports": "80; rm -rf /"}
-        )
+        r = validate_nmap_scan({"target": "192.168.1.10", "ports": "80; rm -rf /"})
         assert r.allowed is False
         assert "invalid port spec" in r.reason
 
@@ -302,9 +300,7 @@ class TestNmapScanValidator:
         assert r.allowed is False
 
     def test_port_out_of_range(self):
-        r = validate_nmap_scan(
-            {"target": "192.168.1.10", "ports": "99999"}
-        )
+        r = validate_nmap_scan({"target": "192.168.1.10", "ports": "99999"})
         assert r.allowed is False
         assert "invalid port spec" in r.reason
 
@@ -517,6 +513,39 @@ class TestPostExploitValidator:
         assert r.allowed is False
         assert "unsafe meterpreter command" in r.reason
 
+    def test_quote_injection_in_meterpreter_command_blocked(self):
+        # A double quote breaks out of the sessions -i -1 -C "..." wrapper.
+        r = validate_post_exploit(
+            {
+                "target": "192.168.1.10",
+                "module": "exploit/windows/smb/ms17_010_eternalblue",
+                "commands": 'getuid" ; evil ; "',
+            }
+        )
+        assert r.allowed is False
+        assert "quote/escape" in r.reason
+
+    def test_backslash_in_meterpreter_command_blocked(self):
+        r = validate_post_exploit(
+            {
+                "target": "192.168.1.10",
+                "module": "exploit/windows/smb/ms17_010_eternalblue",
+                "commands": "getuid\\n evil",
+            }
+        )
+        assert r.allowed is False
+        assert "quote/escape" in r.reason
+
+    def test_multiple_safe_commands_pass(self):
+        r = validate_post_exploit(
+            {
+                "target": "192.168.1.10",
+                "module": "exploit/windows/smb/ms17_010_eternalblue",
+                "commands": "getuid;sysinfo;hashdump",
+            }
+        )
+        assert r.allowed is True
+
 
 # ── run_command validator ─────────────────────────────────────────────────────
 
@@ -530,15 +559,11 @@ class TestRunCommandValidator:
 
     def test_valid_enum4linux_pipe(self):
         """Internal pipe pattern must be preserved."""
-        r = validate_run_command(
-            {"command": "enum4linux -a 192.168.1.10 2>&1 | head -n 150"}
-        )
+        r = validate_run_command({"command": "enum4linux -a 192.168.1.10 2>&1 | head -n 150"})
         assert r.allowed is True
 
     def test_valid_curl(self):
-        r = validate_run_command(
-            {"command": "curl -s -m 10 http://192.168.1.10:80/ 2>&1"}
-        )
+        r = validate_run_command({"command": "curl -s -m 10 http://192.168.1.10:80/ 2>&1"})
         assert r.allowed is True
 
     def test_blocks_disallowed_binary(self):
@@ -547,9 +572,7 @@ class TestRunCommandValidator:
         assert "binary not allowed" in r.reason
 
     def test_blocks_python(self):
-        r = validate_run_command(
-            {"command": "python3 -c 'import os; os.system(\"id\")'"}
-        )
+        r = validate_run_command({"command": "python3 -c 'import os; os.system(\"id\")'"})
         assert r.allowed is False
         assert "binary not allowed" in r.reason
 
@@ -559,9 +582,7 @@ class TestRunCommandValidator:
         assert "binary not allowed" in r.reason
 
     def test_blocks_semicolon_injection(self):
-        r = validate_run_command(
-            {"command": "nmap -sV 10.10.10.5; cat /etc/passwd"}
-        )
+        r = validate_run_command({"command": "nmap -sV 10.10.10.5; cat /etc/passwd"})
         assert r.allowed is False
 
     def test_blocks_backtick_injection(self):
@@ -577,9 +598,7 @@ class TestRunCommandValidator:
         assert r.allowed is False
 
     def test_blocks_unsafe_pipe(self):
-        r = validate_run_command(
-            {"command": "nmap -sV 10.10.10.5 | bash"}
-        )
+        r = validate_run_command({"command": "nmap -sV 10.10.10.5 | bash"})
         assert r.allowed is False
         assert "pipe to disallowed binary" in r.reason
 
@@ -616,9 +635,7 @@ class TestValidateToolCall:
         assert r.allowed is True
 
     def test_run_command_blocked(self):
-        validate_tool_call(
-            "run_command", {"command": "rm -rf /"}
-        )
+        validate_tool_call("run_command", {"command": "rm -rf /"})
         # rm is in the allowlist but this has no unsafe metachar,
         # so it actually passes the sanitizer. This is intentional —
         # rm is needed for post_exploit cleanup.
@@ -644,15 +661,11 @@ class TestValidateBuiltCommand:
         assert r.allowed is True
 
     def test_valid_nmap(self):
-        r = validate_built_command(
-            "nmap -sV -sC -p 1-1000 192.168.1.10", "nmap_scan"
-        )
+        r = validate_built_command("nmap -sV -sC -p 1-1000 192.168.1.10", "nmap_scan")
         assert r.allowed is True
 
     def test_valid_smb_enum_pipe(self):
-        r = validate_built_command(
-            "enum4linux -S 192.168.1.10 2>&1 | head -n 150", "smb_enum"
-        )
+        r = validate_built_command("enum4linux -S 192.168.1.10 2>&1 | head -n 150", "smb_enum")
         assert r.allowed is True
 
     def test_blocks_unknown_binary(self):
@@ -665,7 +678,6 @@ class TestValidateBuiltCommand:
 
 
 # ── Dispatcher integration (end-to-end) ───────────────────────────────────────
-
 
 
 @pytest.fixture
@@ -745,9 +757,7 @@ class TestDispatcherIntegration:
         tool, output, elapsed = dispatcher.dispatch(
             {
                 "tool": "run_command",
-                "args": {
-                    "command": "nmap --script smb-vuln-ms17-010 -p 445 192.168.1.10 2>&1"
-                },
+                "args": {"command": "nmap --script smb-vuln-ms17-010 -p 445 192.168.1.10 2>&1"},
             }
         )
         assert "[BLOCKED]" not in output

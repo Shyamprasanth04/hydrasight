@@ -77,9 +77,7 @@ class ContextBuilder:
             top = findings.ports[:_MAX_PORTS_SHOWN]
             port_strs = [f"{p['port']}/{p.get('service', '?')}" for p in top]
             suffix = "..." if len(findings.ports) > _MAX_PORTS_SHOWN else ""
-            lines.append(
-                f"Open ports : {len(findings.ports)} — {', '.join(port_strs)}{suffix}"
-            )
+            lines.append(f"Open ports : {len(findings.ports)} — {', '.join(port_strs)}{suffix}")
         else:
             lines.append("Open ports : none discovered")
 
@@ -107,10 +105,7 @@ class ContextBuilder:
         # ── high-confidence findings ──────────────────────────────────────────
         high_conf = findings.high_confidence_findings[:_MAX_HIGH_CONF_SHOWN]
         if high_conf:
-            hc_parts = [
-                f"{r.name} ({r.severity.value}, {r.confidence:.0%})"
-                for r in high_conf
-            ]
+            hc_parts = [f"{r.name} ({r.severity.value}, {r.confidence:.0%})" for r in high_conf]
             lines.append(f"High-conf  : {', '.join(hc_parts)}")
 
         # ── credentials / hashes / sessions ──────────────────────────────────

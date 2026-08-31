@@ -586,6 +586,7 @@ class ShellHandlers:
     def _handle_exit(self) -> None:
         console.print()
         info("shutting down")
+
     def _handle_sessions(self, parts: list[str]) -> None:
         if not self.session_manager:
             warn("session manager is not enabled")

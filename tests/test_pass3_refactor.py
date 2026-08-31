@@ -1,4 +1,5 @@
 from hydrasight.core.builtin_actions import register_builtins
+from hydrasight.integrations.kali_api import KaliAPI
 from hydrasight.services.action_planner import ActionPlanner
 from hydrasight.services.dispatcher import Dispatcher
 from hydrasight.services.intent_classifier import Intent, IntentClassifier
@@ -6,6 +7,7 @@ from hydrasight.services.intent_router import route_intent
 
 # Ensure registry is populated for tests
 register_builtins()
+
 
 def test_nl_phrase_to_correct_action_id():
     classifier = IntentClassifier()
@@ -16,6 +18,7 @@ def test_nl_phrase_to_correct_action_id():
 
     res2 = classifier.classify("check ftp on 192.168.1.1")
     assert res2.tool_hint == "ftp_check"
+
 
 def test_smb_routing_priority():
     classifier = IntentClassifier()
@@ -32,6 +35,7 @@ def test_smb_routing_priority():
     res3 = classifier.classify("smb vuln scan 10.0.0.1")
     assert res3.tool_hint == "smb_check"
 
+
 def test_route_intent_registry_backed():
     # nmap_smb_vuln routes to smb_check
     res = route_intent("smb vuln ms17", "10.0.0.1")
@@ -42,6 +46,7 @@ def test_route_intent_registry_backed():
     res2 = route_intent("enum4linux", "10.0.0.1")
     assert res2 is not None
     assert res2["tool"] == "smb_enum"
+
 
 def test_planner_output_uses_registry_defaults():
     classifier = IntentClassifier()
@@ -61,20 +66,23 @@ def test_planner_output_uses_registry_defaults():
     assert "-sC" in args
     assert "10.10.10.10" in args
 
-from hydrasight.integrations.kali_api import KaliAPI
 
 class MockKaliAPI(KaliAPI):
     def __init__(self):
         self.last_cmd = ""
+
     def run(self, cmd, timeout=0):
         self.last_cmd = cmd
         return {"output": "ok", "success": True}
+
     def local_ip(self, target):
         return "127.0.0.1"
+
 
 def test_dispatcher_uses_command_builder():
     kali = MockKaliAPI()
     import logging
+
     log = logging.getLogger("test")
     dispatcher = Dispatcher(kali, log, {})
 
@@ -93,9 +101,11 @@ def test_dispatcher_uses_command_builder():
     assert " 21 " not in kali.last_cmd
     assert kali.last_cmd.endswith("2>&1 | head -n 40")
 
+
 def test_malformed_fragments_regression():
     kali = MockKaliAPI()
     import logging
+
     log = logging.getLogger("test")
     dispatcher = Dispatcher(kali, log, {})
 
@@ -111,6 +121,7 @@ def test_malformed_fragments_regression():
     assert kali.last_cmd == "enum4linux -a 192.168.100.133 2>&1 | head -n 150"
     assert "21" not in kali.last_cmd
 
+
 def test_execution_modes_preserved():
     # Confirm, auto, never logic is primarily handled in ChatController/ExecutionPolicy,
     # but let's ensure PendingAction has confidence and reason to support them.
@@ -123,6 +134,7 @@ def test_execution_modes_preserved():
     action = planner.plan(res)
     assert action is not None
     assert action.confidence == 0.9
+
 
 def test_existing_builtins_work():
     classifier = IntentClassifier()

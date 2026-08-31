@@ -489,8 +489,6 @@ def test_chat_controller_blocks_fake_exec_claims():
 # ── Goal 1: _chat_context() provides state context ────────────────────────────
 
 
-
-
 def test_shell_chat_context_returns_state_block(shell):
     """_chat_context() must always return a string with context headers."""
     # Without findings

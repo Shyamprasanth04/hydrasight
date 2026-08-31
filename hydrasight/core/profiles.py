@@ -16,6 +16,7 @@ class ScanProfile:
     stage_three_targeted_scripts: bool = False
     timeout_multiplier: float = 1.0
 
+
 PROFILES: dict[str, ScanProfile] = {
     "quick": ScanProfile(
         name="quick",
@@ -26,7 +27,7 @@ PROFILES: dict[str, ScanProfile] = {
         default_scripts=[],
         timing_template=4,
         staged=False,
-        timeout_multiplier=0.5
+        timeout_multiplier=0.5,
     ),
     "default": ScanProfile(
         name="default",
@@ -37,19 +38,19 @@ PROFILES: dict[str, ScanProfile] = {
         default_scripts=["default"],
         timing_template=3,
         staged=False,
-        timeout_multiplier=1.0
+        timeout_multiplier=1.0,
     ),
     "deep": ScanProfile(
         name="deep",
         description="All TCP ports, staged service detection",
         port_mode="all",
-        service_detection=False, # Handled in stage two
+        service_detection=False,  # Handled in stage two
         default_scripts=[],
         timing_template=3,
         staged=True,
         stage_two_service_detection=True,
         stage_three_targeted_scripts=False,
-        timeout_multiplier=3.0
+        timeout_multiplier=3.0,
     ),
     "web": ScanProfile(
         name="web",
@@ -60,7 +61,7 @@ PROFILES: dict[str, ScanProfile] = {
         default_scripts=["http-title", "http-methods"],
         timing_template=3,
         staged=False,
-        timeout_multiplier=1.0
+        timeout_multiplier=1.0,
     ),
     "smb": ScanProfile(
         name="smb",
@@ -71,6 +72,6 @@ PROFILES: dict[str, ScanProfile] = {
         default_scripts=["smb-os-discovery", "smb-security-mode"],
         timing_template=3,
         staged=False,
-        timeout_multiplier=1.0
-    )
+        timeout_multiplier=1.0,
+    ),
 }

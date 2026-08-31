@@ -252,10 +252,7 @@ def render_roe(roe: RulesOfEngagement, roe_file: str) -> None:
     if roe_path.exists():
         info(f"loaded from {roe_file}")
     else:
-        info(
-            f"no {roe_file} found — using permissive defaults  "
-            f"(create it to enforce scope)"
-        )
+        info(f"no {roe_file} found — using permissive defaults  (create it to enforce scope)")
     console.print()
     div()
 
@@ -429,14 +426,13 @@ def render_proposed_action(action: PendingAction) -> None:
     console.print()
     console.print(f"  [{P.RED}]This will send network traffic to the target.[/]")
     console.print()
-    console.print(
-        f"  [{P.AMBER}]Confirm?[/]  [{P.PRIMARY}]yes[/]  [{P.DIM}]/[/]  [{P.RED}]no[/]"
-    )
+    console.print(f"  [{P.AMBER}]Confirm?[/]  [{P.PRIMARY}]yes[/]  [{P.DIM}]/[/]  [{P.RED}]no[/]")
     console.print()
     div()
 
 
 # ── conclusion display ───────────────────────────────────────────────────────
+
 
 def render_conclusion(findings: Findings) -> None:
     """Display engagement outcome and conclusion type."""
@@ -467,7 +463,11 @@ def render_conclusion(findings: Findings) -> None:
     elif report.verified_findings:
         outcome, outcome_color = "VALIDATION", P.AMBER
         outcome_desc = "Vulnerabilities independently verified"
-    elif report.supported_candidates or report.no_strategy_candidates or report.attempted_not_confirmed_findings:
+    elif (
+        report.supported_candidates
+        or report.no_strategy_candidates
+        or report.attempted_not_confirmed_findings
+    ):
         outcome, outcome_color = "VULNERABILITY-CANDIDATES", P.AMBER
         outcome_desc = "Candidate vulnerabilities identified"
     elif report.ports:
@@ -594,9 +594,9 @@ def render_suggest(
         t.columns[0].justify = "right"
         t.columns[3].justify = "right"
         for i, s in enumerate(active, 1):
-            roe_blocked = (
-                roe.is_module_blocked(s.msf_module) if s.msf_module else False
-            ) or (roe.is_port_blocked(s.rport) if s.rport else False)
+            roe_blocked = (roe.is_module_blocked(s.msf_module) if s.msf_module else False) or (
+                roe.is_port_blocked(s.rport) if s.rport else False
+            )
             title = s.title
             if roe_blocked:
                 title = f"[{P.RED}][ROE BLOCKED][/] {title}"
@@ -621,13 +621,9 @@ def render_suggest(
             )
 
     if manual_items:
-        console.print(
-            f"\n  [{P.MUTED}]MANUAL REVIEW PATHS[/]  [{P.DIM}]({len(manual_items)})[/]"
-        )
+        console.print(f"\n  [{P.MUTED}]MANUAL REVIEW PATHS[/]  [{P.DIM}]({len(manual_items)})[/]")
         for m in manual_items:
-            console.print(
-                f"    [{P.DIM}]·[/]  [{P.TEXT}]{m.title}[/]  [{P.MUTED}]{m.rationale}[/]"
-            )
+            console.print(f"    [{P.DIM}]·[/]  [{P.TEXT}]{m.title}[/]  [{P.MUTED}]{m.rationale}[/]")
 
     console.print()
     info("use [bold]plan[/] to see the full engagement roadmap")
@@ -661,9 +657,7 @@ def render_plan(
         "post-access": P.RED,
     }.get(plan.branch.value, P.TEXT)
 
-    console.print(
-        f"  [{P.MUTED}]branch[/]    [bold {branch_color}]{plan.branch.value.upper()}[/]"
-    )
+    console.print(f"  [{P.MUTED}]branch[/]    [bold {branch_color}]{plan.branch.value.upper()}[/]")
     console.print(f"  [{P.MUTED}]reason[/]    [{P.DIM}]{plan.branch_reason}[/]")
     if plan.target:
         console.print(f"  [{P.MUTED}]target[/]    [{P.TEXT}]{plan.target}[/]")
@@ -693,8 +687,7 @@ def render_plan(
 
     if plan.actionable_suggestions:
         console.print(
-            f"\n  [{P.MUTED}]TOP CANDIDATES[/]  "
-            f"[{P.DIM}]({len(plan.actionable_suggestions)})[/]"
+            f"\n  [{P.MUTED}]TOP CANDIDATES[/]  [{P.DIM}]({len(plan.actionable_suggestions)})[/]"
         )
         for s in plan.actionable_suggestions[:5]:
             console.print(
@@ -754,9 +747,7 @@ def render_suggestion(message: str | None, pending: PendingAction | None) -> Non
         for line in message.splitlines():
             console.print(f"  [{P.TEXT}]{line}[/]")
     elif pending:
-        console.print(
-            f"  [{P.MUTED}]I would run:[/] [{P.PRIMARY}]{pending.command_str}[/]"
-        )
+        console.print(f"  [{P.MUTED}]I would run:[/] [{P.PRIMARY}]{pending.command_str}[/]")
         console.print(
             f"  [{P.MUTED}]To execute it use:[/] "
             f"[{P.PRIMARY}]autopwn {pending.target}[/]  "
@@ -809,11 +800,11 @@ def render_session_list(summaries: list) -> None:
         if diff < 60:
             ago = f"{int(diff)}s"
         elif diff < 3600:
-            ago = f"{int(diff/60)}m"
+            ago = f"{int(diff / 60)}m"
         elif diff < 86400:
-            ago = f"{int(diff/3600)}h"
+            ago = f"{int(diff / 3600)}h"
         else:
-            ago = f"{int(diff/86400)}d"
+            ago = f"{int(diff / 86400)}d"
 
         # Stats string: Verified / Exploited / Candidates
         stats = f"{s.verified_count}/{s.exploited_count}/{s.findings_count}"
@@ -865,6 +856,7 @@ def render_session_detail(findings: Findings, state: PlannerState | None, sessio
 
     # Show canonical finding buckets using the new Pass 4.1 report model
     from hydrasight.models.report_model import ReportModel
+
     report = ReportModel.from_findings(findings)
 
     if report.exploited_findings:
@@ -878,11 +870,12 @@ def render_session_detail(findings: Findings, state: PlannerState | None, sessio
         console.print()
         console.print(f"  [{P.MUTED}]TIMELINE[/]")
         from hydrasight.cli.display import make_table
+
         t = make_table(
             ("phase", P.DIM, 14),
             ("tool", P.PRIMARY, 16),
             ("outcome", P.TEXT, 10),
-            ("event", P.MUTED, 0)
+            ("event", P.MUTED, 0),
         )
         for ev in findings.timeline:
             phase = ev.get("phase", "")

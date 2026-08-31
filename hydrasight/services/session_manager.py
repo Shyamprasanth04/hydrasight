@@ -12,6 +12,7 @@ from hydrasight.models.planner_state import PlannerState
 @dataclass
 class SessionSummary:
     """Read-only presentation model for the session list."""
+
     session_id: str
     target: str
     started_at: str

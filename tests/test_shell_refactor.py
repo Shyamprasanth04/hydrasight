@@ -195,8 +195,10 @@ class TestShellHandlers:
         handlers.findings.ports = []
         handlers.findings.vulns = []
         handlers.findings.credentials = []
-        with patch("hydrasight.cli.shell_handlers.console"), \
-             patch("hydrasight.cli.shell_renderer.console"):
+        with (
+            patch("hydrasight.cli.shell_handlers.console"),
+            patch("hydrasight.cli.shell_renderer.console"),
+        ):
             result = handlers.handle_builtin("exit", ["exit"], "exit")
         assert result is False
 

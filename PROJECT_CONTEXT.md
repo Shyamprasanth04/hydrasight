@@ -2,7 +2,8 @@
 
 > **Version:** 4.0.0  
 > **Type:** Python CLI — AI-assisted offensive security orchestration framework  
-> **Status:** Active development. Phase 1–4 complete. 393/393 tests passing.
+> **Status:** Active development. Phase 1–4 complete. 665/665 tests passing.  
+> **Default local model:** `qcwind/qwen3-8b-instruct-Q4-K-M:latest` (Ollama)
 
 ---
 
@@ -28,12 +29,12 @@ HydraSight is a local, interactive penetration-testing assistant designed for **
 |---|---|
 | Language | Python 3.10+ |
 | UI | Rich (terminal REPL with panels, tables, spinner) |
-| AI | Ollama (local LLM — default: `qwen2.5:7b`) via HTTP `/api/chat` |
-| Tool backend | Kali Linux MCP server (`/api/command`) |
+| AI | Ollama (local LLM — default: `qcwind/qwen3-8b-instruct-Q4-K-M:latest`) via HTTP `/api/chat` |
+| Tool backend | Kali Linux MCP server (`/api/command`, default port 5000) |
 | PDF reports | ReportLab |
 | Package | `pyproject.toml`, editable install `pip install -e ".[dev]"` |
-| Tests | pytest (393 tests, no network, all mocked) |
-| Lint | ruff, pylint, mypy, black, isort |
+| Tests | pytest (665 tests, no network, all mocked) |
+| Lint/CI | ruff (lint + format), pylint (≥9.0), mypy |
 
 ---
 
@@ -66,10 +67,11 @@ hydrasight/
 │   │   └── roe.py               ← RulesOfEngagement — allowed targets, blocked ports/modules,
 │   │                               approval gates, kill switch
 │   ├── parsers/
-│   │   └── __init__.py          ← Parser.ingest() — routes tool output to findings fields
+│   │   └── base_parser.py       ← Parser — static helpers route tool output to findings fields
 │   ├── reporting/
 │   │   ├── json_reporter.py     ← save findings as JSON
-│   │   └── pdf_reporter.py      ← generate_pdf() — dark ReportLab PDF with findings tables
+│   │   ├── pdf_reporter.py      ← generate_pdf() — dark ReportLab PDF with findings tables
+│   │   └── remediation.py       ← per-finding remediation advice
 │   ├── services/
 │   │   ├── ai_client.py         ← AIClient — orchestration LLM (tool-call extraction)
 │   │   ├── chat_ai_client.py    ← ChatAIClient — conversation-only LLM (no tool calls)
@@ -86,21 +88,24 @@ hydrasight/
 │   └── utils/
 │       ├── ip_utils.py          ← IP validation, CIDR checks, dedup_ports
 │       └── time_utils.py        ← ts() timestamp helper
-├── tests/                       ← 393 pytest tests (all offline, all mocked)
+├── tests/                       ← 665 pytest tests (all offline, all mocked)
+│   ├── test_command_sanitizer.py ← security gate (largest, 134 tests)
 │   ├── test_command_router.py   ← CommandRouter classification tests
-│   ├── test_dispatcher.py       ← Dispatcher tool-call building tests
+│   ├── test_engine.py           ← engagement engine: recon/planning/exploit/hash-crack
+│   ├── test_nl_pipeline.py      ← NL intent pipeline end-to-end tests
+│   ├── test_dispatcher.py       ← Dispatcher command-building tests
 │   ├── test_exploit_suggestion.py ← ExploitSuggestionProvider tests
 │   ├── test_finding_record.py   ← FindingRecord confidence/severity tests
 │   ├── test_findings.py         ← Findings state object tests
 │   ├── test_ip_utils.py         ← IP/CIDR validation tests
-│   ├── test_nl_pipeline.py      ← NL intent pipeline end-to-end tests (largest file)
-│   ├── test_parser.py           ← Parser.ingest() output parsing tests
+│   ├── test_parser.py           ← Parser output parsing tests
 │   ├── test_phase4.py           ← Phase 4 feature tests (plan, suggest, conclusion)
 │   ├── test_planner_state.py    ← PlannerState memory/retry tests
 │   ├── test_post_access.py      ← PostAccessHandler tests
 │   └── test_roe.py              ← RulesOfEngagement tests
-├── hydrasight.json              ← default runtime config
-├── hydrasight.roe.json          ← (optional) rules of engagement scope file
+├── hydrasight.json              ← runtime config (git-ignored; copy from .example)
+├── hydrasight.json.example      ← commit-safe config template
+├── hydrasight.roe.json          ← (optional, git-ignored) rules of engagement scope
 ├── pyproject.toml               ← build, lint, test config
 └── README.md                    ← user-facing quick start
 ```
@@ -257,18 +262,18 @@ Controlled via `mode confirm|auto|never` in the REPL or `execution_mode` in conf
 
 ## Configuration Reference
 
-`hydrasight.json`:
+`hydrasight.json` (git-ignored; copy `hydrasight.json.example`):
 ```json
 {
   "ollama_url":       "http://localhost:11434",
-  "kali_api_url":     "http://192.168.100.130:8000",
-  "model":            "qwen2.5:7b",
+  "kali_api_url":     "http://127.0.0.1:5000",
+  "model":            "qcwind/qwen3-8b-instruct-Q4-K-M:latest",
   "context_size":     8192,
   "max_retries":      3,
-  "retry_delay":      5,
+  "retry_delay":      2.0,
   "verbosity":        1,
   "log_file":         "hydrasight.log",
-  "output_dir":       "./hydrasight_output",
+  "output_dir":       "hydrasight_output",
   "lport":            4444,
   "token_budget":     6000,
   "auto_pdf":         true,
@@ -303,11 +308,14 @@ TOOL_TIMEOUTS = {
 Run all tests (no network required, all mocked):
 ```bash
 python -m pytest tests/ -q -p no:ethereum
-# 393 passed
+# 665 passed
 ```
 
 Key test files:
-- `test_nl_pipeline.py` — largest (31 tests): intent classification, NL routing, shell integration, fake-exec guard, meta-intents, SMB routing
+- `test_command_sanitizer.py` — largest (134 tests): security gate validation
+- `test_command_router.py` — CommandRouter classification (84 tests)
+- `test_engine.py` — engagement engine lifecycle, planning, exploitation, hash cracking, ROE gates
+- `test_nl_pipeline.py` — intent classification, NL routing, shell integration, fake-exec guard
 - `test_phase4.py` — plan/suggest/conclusion commands, planner integration
 - `test_roe.py` — ROE model validation, CIDR checks, kill switch
 - `test_finding_record.py` — FindingRecord confidence scoring, severity ranking
@@ -317,12 +325,19 @@ Key test files:
 
 ## Adding a New Tool Action
 
-1. **`intent_classifier.py`** — add a regex pattern to `_tool_hint()` returning a new hint string
-2. **`action_planner.py`** — add `_DEFAULT_PORTS["new_hint"]` and `_build_new_hint()` method that returns a `PendingAction`
-3. **`dispatcher.py`** — add `_new_hint()` method returning the shell command string; wire it in `dispatch()`
-4. **`intent_router.py`** — add a `(pattern, "new_hint")` tuple to `_INTENT_ROUTES` and a corresponding return block in `route_intent()`
-5. **`defaults.py`** — add `TOOL_TIMEOUTS["new_hint"] = <seconds>`
-6. **Tests** — add a test in `test_nl_pipeline.py` asserting classification and in `test_dispatcher.py` asserting the correct command string
+Dispatch is now unified: every input shape is normalized by
+`Dispatcher._resolve()`, validated, rendered by a single `_render()`
+path (which delegates spec-building to `ActionPlanner._build_spec()`),
+then validated again. There is no per-tool branch in `dispatch()` to
+maintain.
+
+1. **`core/builtin_actions.py`** — register an `ActionDefinition` (id, executable, default timeout, ROE category)
+2. **`services/intent_classifier.py`** — add a regex pattern to `_tool_hint()` returning the new hint
+3. **`services/action_planner.py`** — add an `elif action_id == "new_id"` branch in `_build_spec()` returning a `CommandSpec`
+4. **`services/intent_router.py`** — add a routing entry mapping NL keywords to the new action id
+5. **`security/command_sanitizer.py`** — add the action id to `_TOOL_VALIDATORS` (reuse `_generic_target_validator` for simple IP-target tools)
+6. **`config/defaults.py`** — add `TOOL_TIMEOUTS["new_id"] = <seconds>` if the registry default is unsuitable
+7. **Tests** — classification in `test_nl_pipeline.py`, command string in `test_dispatcher.py`, sanitizer allow/deny in `test_command_sanitizer.py`
 
 ---
 
@@ -332,9 +347,9 @@ Key test files:
 # Install
 pip install -e ".[dev]"
 
-# Start Ollama (on Windows host or wherever)
+# Start Ollama (local host)
 ollama serve
-ollama pull qwen2.5:7b
+ollama pull qcwind/qwen3-8b-instruct-Q4-K-M:latest
 
 # Start Kali MCP server (on Kali VM)
 kali-linux-mcp --transport sse
@@ -366,5 +381,6 @@ hydrasight › conclusion                                 → shows outcome summ
 ## Contacts / Ownership
 
 - **Author:** Shyam
-- **Project location:** `c:\Users\shyam\Downloads\hydrasight`
+- **Repository:** https://github.com/Shyamprasanth04/hydrasight
+- **Default local model:** `qcwind/qwen3-8b-instruct-Q4-K-M:latest` (Ollama)
 - **Authorized use only.** Do not scan systems without explicit written permission.

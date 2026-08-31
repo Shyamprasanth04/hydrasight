@@ -45,11 +45,17 @@ dmypy.json
 hydrasight_output/
 # Runtime log — noisy and environment-specific
 hydrasight.log
+# Local runtime config — may contain lab IPs/host details.
+# Copy hydrasight.json.example to hydrasight.json and edit locally.
+hydrasight.json
+# Rules-of-engagement scope files are per-engagement and target-specific.
+hydrasight.roe.json
 # Session autosave files
 autosave_*.json
 autopwn_*.json
 findings_*.json
 report_*.pdf
+.hydrasight_history
 
 # ── IDEs ──────────────────────────────────────────────────────────────────────
 .vscode/

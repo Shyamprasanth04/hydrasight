@@ -22,8 +22,8 @@ except ImportError:
 _NESTED_DICT_KEYS = frozenset({"ollama_options_orchestrator", "ollama_options_chat"})
 
 # Stable paths
-HERE = Path(__file__).resolve().parent                 # hydrasight/config
-PROJECT_ROOT = HERE.parent.parent                      # repo root
+HERE = Path(__file__).resolve().parent  # hydrasight/config
+PROJECT_ROOT = HERE.parent.parent  # repo root
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "hydrasight.json"
 DEFAULT_ENV_PATH = PROJECT_ROOT / ".env"
 

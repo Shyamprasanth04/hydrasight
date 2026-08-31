@@ -156,13 +156,22 @@ def generate_pdf(
 
     has_access = bool(report.sessions)
     has_creds = bool(report.credentials)
-    has_vulns = bool(report.exploited_findings or report.verified_findings or report.supported_candidates or report.no_strategy_candidates)
+    has_vulns = bool(
+        report.exploited_findings
+        or report.verified_findings
+        or report.supported_candidates
+        or report.no_strategy_candidates
+    )
 
     outcome_str = (
-        "Active session obtained" if has_access
-        else "Credentials recovered" if has_creds
-        else "Vulnerabilities verified" if (report.verified_findings or report.exploited_findings)
-        else "Vulnerabilities identified" if has_vulns
+        "Active session obtained"
+        if has_access
+        else "Credentials recovered"
+        if has_creds
+        else "Vulnerabilities verified"
+        if (report.verified_findings or report.exploited_findings)
+        else "Vulnerabilities identified"
+        if has_vulns
         else "Reconnaissance completed"
     )
 
@@ -200,7 +209,6 @@ def generate_pdf(
             sub,
         ),
         PageBreak(),
-
         # ── executive summary ──────────────────────────────────────────────
         Paragraph("Executive Summary", h2),
         HRFlowable(color=green, thickness=0.5),
@@ -225,7 +233,13 @@ def generate_pdf(
                 ["Verified", str(report.verification_coverage.verified)],
                 ["Failed Verification", str(report.verification_coverage.failed)],
                 ["No Verification Strategy", str(report.verification_coverage.no_strategy)],
-                ["Error / Not Applicable", str(report.verification_coverage.error + report.verification_coverage.not_applicable)],
+                [
+                    "Error / Not Applicable",
+                    str(
+                        report.verification_coverage.error
+                        + report.verification_coverage.not_applicable
+                    ),
+                ],
             ],
             colWidths=[80 * mm, 90 * mm],
             style=tbl(),
@@ -313,7 +327,9 @@ def generate_pdf(
             Spacer(1, 3 * mm),
         ]
         for rec in report.supported_candidates:
-            story.append(render_finding_block(rec, "SUPPORTED CANDIDATE", colors.HexColor("#FFA94D")))
+            story.append(
+                render_finding_block(rec, "SUPPORTED CANDIDATE", colors.HexColor("#FFA94D"))
+            )
 
     # ── Attempted But Not Confirmed ─────────────────────────────────────────
     if report.attempted_not_confirmed_findings:
@@ -383,7 +399,10 @@ def generate_pdf(
             Paragraph("Candidate Findings Without Verification Strategy", h2),
             HRFlowable(color=green, thickness=0.5),
             Spacer(1, 3 * mm),
-            Paragraph("These candidate findings lack automated verification strategies and must be investigated manually. Most are placed in the appendix.", bd),
+            Paragraph(
+                "These candidate findings lack automated verification strategies and must be investigated manually. Most are placed in the appendix.",
+                bd,
+            ),
             Spacer(1, 3 * mm),
         ]
         shown = 0
@@ -394,7 +413,12 @@ def generate_pdf(
             shown += 1
 
         if len(report.no_strategy_candidates) > 5:
-            story.append(Paragraph(f"<i>... and {len(report.no_strategy_candidates) - 5} more unverified candidates not shown (see Appendix).</i>", bd))
+            story.append(
+                Paragraph(
+                    f"<i>... and {len(report.no_strategy_candidates) - 5} more unverified candidates not shown (see Appendix).</i>",
+                    bd,
+                )
+            )
 
     # ── Appendix ───────────────────────────────────────────────────────────
     if report.appendix_findings:
@@ -405,15 +429,20 @@ def generate_pdf(
             Spacer(1, 3 * mm),
         ]
         rows = [["Severity", "Finding", "Status"]] + [
-            [r.severity, r.display_title[:60], r.status_label]
-            for r in report.appendix_findings
+            [r.severity, r.display_title[:60], r.status_label] for r in report.appendix_findings
         ]
         story.append(RLTable(rows, colWidths=[20 * mm, 120 * mm, 34 * mm], style=tbl()))
 
     # ── Remediation Recommendations ────────────────────────────────────────
     # Use normalized report items for remediation to prevent serialization leakage
     recs_from_items = []
-    for bucket in [report.exploited_findings, report.verified_findings, report.supported_candidates, report.no_strategy_candidates, report.attempted_not_confirmed_findings]:
+    for bucket in [
+        report.exploited_findings,
+        report.verified_findings,
+        report.supported_candidates,
+        report.no_strategy_candidates,
+        report.attempted_not_confirmed_findings,
+    ]:
         for item in bucket:
             if item.display_remediation:
                 recs_from_items.append((item.severity, str(item.display_remediation)))

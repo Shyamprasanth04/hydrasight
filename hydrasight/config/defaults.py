@@ -104,7 +104,7 @@ _CONFIG_ALLOWED_KEYS = frozenset(
         "rockyou_path",
         "execution_mode",  # confirm | auto | never
         "ollama_options_orchestrator",  # per-call Ollama options for tool orchestration
-        "ollama_options_chat",          # per-call Ollama options for conversational path
+        "ollama_options_chat",  # per-call Ollama options for conversational path
     }
 )
 

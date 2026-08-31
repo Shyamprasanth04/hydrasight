@@ -165,22 +165,16 @@ def _validate_nmap_flags(raw: str) -> SanitizeResult:
 
         # Must look like a flag
         if not _NMAP_FLAG_RE.match(token):
-            return SanitizeResult.reject(
-                f"invalid nmap flag: {token!r}"
-            )
+            return SanitizeResult.reject(f"invalid nmap flag: {token!r}")
 
         # If this is a value-taking flag, validate its argument
         if token in _NMAP_VALUE_FLAGS:
             i += 1
             if i >= len(tokens):
-                return SanitizeResult.reject(
-                    f"nmap flag {token} requires a value"
-                )
+                return SanitizeResult.reject(f"nmap flag {token} requires a value")
             val = tokens[i]
             if not _NMAP_VALUE_RE.match(val):
-                return SanitizeResult.reject(
-                    f"unsafe value for {token}: {val!r}"
-                )
+                return SanitizeResult.reject(f"unsafe value for {token}: {val!r}")
         i += 1
 
     return SanitizeResult.ok()
@@ -429,28 +423,25 @@ def validate_post_exploit(args: dict) -> SanitizeResult:
             try:
                 pint = int(pval)
             except (ValueError, TypeError):
-                return SanitizeResult.reject(
-                    f"invalid {port_key}: {pval!r}"
-                )
+                return SanitizeResult.reject(f"invalid {port_key}: {pval!r}")
             if not (1 <= pint <= 65535):
-                return SanitizeResult.reject(
-                    f"{port_key} out of range: {pint}"
-                )
+                return SanitizeResult.reject(f"{port_key} out of range: {pint}")
 
-    # Validate post-exploit commands (semicolon-separated inside RC)
+    # Validate post-exploit commands (semicolon-separated inside RC).
+    # Each command is embedded in:  sessions -i -1 -C "<command>"
+    # so a double quote (or backslash) would break out of the Meterpreter
+    # -C quoting and inject into the RC file. Shell metacharacters are
+    # likewise never legitimate inside a Meterpreter command.
     commands = args.get("commands", "")
     if commands:
-        # Commands are Meterpreter commands, not shell commands.
-        # They go inside sessions -i -1 -C "...", so reject
-        # anything that looks like shell injection.
         for part in str(commands).split(";"):
             part = part.strip()
             if not part:
                 continue
+            if '"' in part or "\\" in part:
+                return SanitizeResult.reject(f"quote/escape in meterpreter command: {part!r}")
             if _UNSAFE_METACHAR_RE.search(part):
-                return SanitizeResult.reject(
-                    f"unsafe meterpreter command: {part!r}"
-                )
+                return SanitizeResult.reject(f"unsafe meterpreter command: {part!r}")
 
     return SanitizeResult.ok()
 
@@ -471,9 +462,7 @@ def validate_run_command(args: dict) -> SanitizeResult:
         return SanitizeResult.reject("cannot determine binary")
 
     if binary not in ALLOWED_BINARIES:
-        return SanitizeResult.reject(
-            f"binary not allowed: {binary!r}"
-        )
+        return SanitizeResult.reject(f"binary not allowed: {binary!r}")
 
     # Check pipes: only allow piping to safe targets
     parts = cmd.split("|")
@@ -482,20 +471,17 @@ def validate_run_command(args: dict) -> SanitizeResult:
         if segment_tokens:
             pipe_binary = segment_tokens[0]
             if pipe_binary not in _SAFE_PIPE_TARGETS:
-                return SanitizeResult.reject(
-                    f"pipe to disallowed binary: {pipe_binary!r}"
-                )
+                return SanitizeResult.reject(f"pipe to disallowed binary: {pipe_binary!r}")
 
     # Check for unsafe metacharacters in the full command
     if _has_unsafe_metacharacters(cmd):
-        return SanitizeResult.reject(
-            f"unsafe metacharacters in command: {cmd!r}"
-        )
+        return SanitizeResult.reject(f"unsafe metacharacters in command: {cmd!r}")
 
     return SanitizeResult.ok()
 
 
 # ── main entry points ─────────────────────────────────────────────────────────
+
 
 # Tool → validator mapping
 def _generic_target_validator(args: dict) -> SanitizeResult:
@@ -503,7 +489,6 @@ def _generic_target_validator(args: dict) -> SanitizeResult:
     if target and not _is_ip(target):
         return SanitizeResult.reject(f"invalid target IP: {target!r}")
     return SanitizeResult.ok()
-
 
 
 _TOOL_VALIDATORS: dict[str, Callable[[dict], SanitizeResult]] = {
@@ -563,13 +548,9 @@ def validate_built_command(cmd: str, tool: str) -> SanitizeResult:
         return SanitizeResult.reject("cannot determine binary")
 
     if binary not in ALLOWED_BINARIES:
-        return SanitizeResult.reject(
-            f"binary not allowed in built command: {binary!r}"
-        )
+        return SanitizeResult.reject(f"binary not allowed in built command: {binary!r}")
 
     if _has_unsafe_metacharacters(cmd):
-        return SanitizeResult.reject(
-            "unsafe metacharacters in built command"
-        )
+        return SanitizeResult.reject("unsafe metacharacters in built command")
 
     return SanitizeResult.ok()

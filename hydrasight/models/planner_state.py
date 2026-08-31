@@ -150,6 +150,7 @@ class PlannerState:
     def to_dict(self) -> dict:
         """Serialize PlannerState for persistence."""
         from dataclasses import asdict
+
         return {
             "max_retries": self.max_retries,
             "phase_results": {k: asdict(v) for k, v in self.phase_results.items()},
