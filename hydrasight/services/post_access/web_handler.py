@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from hydrasight.services.post_access.base import BasePostAccessHandler
-from hydrasight.services.post_access.types import AccessType, PostAccessResult
+from .base import BasePostAccessHandler
+from .types import AccessType, PostAccessResult
 
 if TYPE_CHECKING:
     from hydrasight.services.dispatcher import Dispatcher

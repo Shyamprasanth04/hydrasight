@@ -7,7 +7,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from hydrasight.services.post_access.types import AccessType, PostAccessResult
+from .types import AccessType, PostAccessResult
 
 if TYPE_CHECKING:
     from hydrasight.services.dispatcher import Dispatcher
