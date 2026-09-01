@@ -22,7 +22,7 @@ import json
 import logging
 import signal
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from hydrasight.cli.display import (
     console,
@@ -40,6 +40,11 @@ from hydrasight.core.engine import Engine
 from hydrasight.integrations.kali_api import KaliAPI
 from hydrasight.models.findings import Findings
 from hydrasight.models.roe import RulesOfEngagement
+from hydrasight.security.audit import AuditLogger
+from hydrasight.security.authorization import (
+    AUTHORIZATION_FILE,
+    AuthorizationManager,
+)
 from hydrasight.services.action_planner import ActionPlanner
 from hydrasight.services.ai_client import AIClient
 from hydrasight.services.chat_controller import ChatController
@@ -75,6 +80,7 @@ COMMANDS = [
     "abort",
     "config",
     "roe",
+    "authorize",
     "verify",
     "suggest",
     "plan",
@@ -110,8 +116,8 @@ def _completer(text: str, state: int) -> str | None:
 
 
 if _READLINE_OK:
-    _rl.set_completer(_completer)  # type: ignore[attr-defined]
-    _rl.parse_and_bind("tab: complete")  # type: ignore[attr-defined]
+    _rl.set_completer(_completer)
+    _rl.parse_and_bind("tab: complete")
 
 
 class Shell:
@@ -141,8 +147,28 @@ class Shell:
             self.log,
             options=cfg.get("ollama_options_orchestrator"),
         )
-        self.dispatcher = Dispatcher(self.kali, self.log, cfg)
+        # Load the Rules-of-Engagement envelope BEFORE constructing the
+        # dispatcher so the scope gate can enforce ROE ∩ authorization.
         self.roe = self._load_roe()
+
+        # Accountability + mandatory authorization (auto-loads a pre-signed
+        # hydrasight.authorization.json for CI/CTF; otherwise deny-by-default).
+        self.audit = AuditLogger(cfg["output_dir"], operator=cfg.get("operator", "operator"))
+        self.auth = AuthorizationManager()
+        ok_load, msg_load = self.auth.load_file(AUTHORIZATION_FILE)
+        if ok_load:
+            self.audit.authorization_granted(
+                reason=msg_load,
+                scope=self.auth.scope_summary(),
+                authorization_id=(
+                    self.auth.attestation.authorization_id if self.auth.attestation else ""
+                ),
+            )
+            console.print(f"  [{P.BRIGHT}]*[/{P.BRIGHT}] {msg_load}")
+
+        self.dispatcher = Dispatcher(
+            self.kali, self.log, cfg, audit=self.audit, auth=self.auth, roe=self.roe
+        )
         self.engine = Engine(
             self.ai,
             self.kali,
@@ -179,6 +205,8 @@ class Shell:
             roe=self.roe,
             log=self.log,
             session_manager=self.session_manager,
+            auth=self.auth,
+            audit=self.audit,
         )
 
         self._rl_init()
@@ -192,7 +220,7 @@ class Shell:
                 data = json.loads(p.read_text(encoding="utf-8"))
                 roe = RulesOfEngagement.from_dict(data)
                 return roe
-            except Exception as exc:  # noqa: BLE001
+            except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
                 print(f"[!] roe load error: {exc} — using permissive defaults")
         return RulesOfEngagement.permissive()
 
@@ -213,57 +241,59 @@ class Shell:
         """Delegate to ShellHandlers._chat_context()."""
         return self._handlers._chat_context()
 
-    # _dispatch_pending_action: property with setter so test mocks can replace it
+    # These delegation properties are settable so test mocks can replace them.
+    # They forward attributes/methods onto ShellHandlers. Type as Any since the
+    # delegated objects are callables/services of varying signatures.
+
     @property
-    def _dispatch_pending_action(self):  # type: ignore[override]
+    def _dispatch_pending_action(self) -> Any:
         return self._handlers._dispatch_pending_action
 
     @_dispatch_pending_action.setter
-    def _dispatch_pending_action(self, value) -> None:  # type: ignore[override]
+    def _dispatch_pending_action(self, value: Any) -> None:
         self._handlers._dispatch_pending_action = value  # type: ignore[method-assign]
 
-    # _show_plan: property with setter for same reason
     @property
-    def _show_plan(self):  # type: ignore[override]
+    def _show_plan(self) -> Any:
         return self._handlers._show_plan
 
     @_show_plan.setter
-    def _show_plan(self, value) -> None:  # type: ignore[override]
+    def _show_plan(self, value: Any) -> None:
         self._handlers._show_plan = value  # type: ignore[method-assign]
 
     # _confirm: expose handlers' ConfirmationManager directly
     @property
-    def _confirm(self):  # type: ignore[override]
+    def _confirm(self) -> Any:
         return self._handlers._confirm
 
     # _chat: expose handlers' ChatController directly so tests can mock .chat
     @property
-    def _chat(self):  # type: ignore[override]
+    def _chat(self) -> Any:
         return self._handlers._chat
 
     # _run_verify / _show_suggest / _show_conclusion: settable for test mocks
     @property
-    def _run_verify(self):  # type: ignore[override]
+    def _run_verify(self) -> Any:
         return self._handlers._run_verify
 
     @_run_verify.setter
-    def _run_verify(self, value) -> None:  # type: ignore[override]
+    def _run_verify(self, value: Any) -> None:
         self._handlers._run_verify = value  # type: ignore[method-assign]
 
     @property
-    def _show_suggest(self):  # type: ignore[override]
+    def _show_suggest(self) -> Any:
         return self._handlers._show_suggest
 
     @_show_suggest.setter
-    def _show_suggest(self, value) -> None:  # type: ignore[override]
+    def _show_suggest(self, value: Any) -> None:
         self._handlers._show_suggest = value  # type: ignore[method-assign]
 
     @property
-    def _show_conclusion(self):  # type: ignore[override]
+    def _show_conclusion(self) -> Any:
         return self._handlers._show_conclusion
 
     @_show_conclusion.setter
-    def _show_conclusion(self, value) -> None:  # type: ignore[override]
+    def _show_conclusion(self, value: Any) -> None:
         self._handlers._show_conclusion = value  # type: ignore[method-assign]
 
     # ── readline ──────────────────────────────────────────────────────────────
@@ -273,17 +303,17 @@ class Shell:
             return
         Path(self.HIST).touch(exist_ok=True)
         try:
-            _rl.read_history_file(self.HIST)  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
+            _rl.read_history_file(self.HIST)
+        except OSError:
             pass
-        _rl.set_history_length(1000)  # type: ignore[attr-defined]
+        _rl.set_history_length(1000)
 
     def _rl_save(self) -> None:
         if not _READLINE_OK:
             return
         try:
-            _rl.write_history_file(self.HIST)  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
+            _rl.write_history_file(self.HIST)
+        except OSError:
             pass
 
     # ── signal handling ───────────────────────────────────────────────────────

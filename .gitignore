@@ -83,3 +83,5 @@ mypy_*.txt
 file_on_disk.txt
 shell_init.txt
 test_output.*
+# ── MkDocs / packaging ───────────────────────────────────────────────────────
+site/

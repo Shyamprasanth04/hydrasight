@@ -76,7 +76,7 @@ class AIClient:
             return False, "ollama not running — run: ollama serve"
         except requests.Timeout:
             return False, "ollama timeout"
-        except Exception as exc:  # noqa: BLE001
+        except (requests.RequestException, ValueError) as exc:
             return False, str(exc)
 
     # ── context management ────────────────────────────────────────────────────
@@ -147,7 +147,8 @@ class AIClient:
                 self.log.error("ai timeout attempt %d", attempt)
             except requests.ConnectionError:
                 self.log.error("ai connection lost attempt %d", attempt)
-            except Exception as exc:  # noqa: BLE001
+            except (requests.RequestException, ValueError) as exc:
+                # HTTP errors (raise_for_status) and malformed JSON responses.
                 self.log.error("ai error attempt %d: %s", attempt, exc)
             if attempt < retries:
                 time.sleep(delay)

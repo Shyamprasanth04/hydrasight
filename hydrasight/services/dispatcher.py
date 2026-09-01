@@ -18,6 +18,7 @@ import base64
 import logging
 import textwrap
 import time
+from typing import TYPE_CHECKING
 
 from hydrasight.config.defaults import TOOL_TIMEOUTS
 from hydrasight.core.command_builder import CommandBuilder
@@ -36,6 +37,11 @@ from hydrasight.security.command_sanitizer import (
 from hydrasight.services.action_planner import ActionPlanner
 from hydrasight.utils.ip_utils import force_ip
 
+if TYPE_CHECKING:
+    from hydrasight.models.roe import RulesOfEngagement
+    from hydrasight.security.audit import AuditLogger
+    from hydrasight.security.authorization import AuthorizationManager
+
 # Tools whose command string is produced internally rather than via a
 # CommandSpec, and which therefore bypass spec rendering.
 _RAW_COMMAND_TOOLS = frozenset({"post_exploit", "run_command"})
@@ -51,11 +57,90 @@ class Dispatcher:
         kali: KaliAPI,
         log: logging.Logger,
         cfg: dict,
+        *,
+        audit: AuditLogger | None = None,
+        auth: AuthorizationManager | None = None,
+        roe: RulesOfEngagement | None = None,
     ) -> None:
         self.kali = kali
         self.log = log
         self.cfg = cfg
         self._planner = ActionPlanner()
+        # Security/accountability hooks.  When None the dispatcher behaves
+        # exactly as before (e.g. unit tests that don't wire a gate).
+        self.audit = audit
+        self.auth = auth
+        self.roe = roe
+
+    # ── scope / authorization gate (the single chokepoint) ─────────────────────
+
+    def _execution_target(self, tool: str, args: dict) -> str:
+        """Resolve the IP a tool acts on, for scope enforcement.
+
+        Uses ``args["target"]`` (set to the canonical target during
+        dispatch), falling back to a URL host and then the canonical target.
+        ``run_command`` (arbitrary shell) and ``post_exploit`` always resolve
+        to the engagement target.
+        """
+        target = self._target_from_args(args)
+        return str(target or self.canonical_target or "127.0.0.1")
+
+    def _enforce_scope(self, tool: str, args: dict, command: str) -> tuple[bool, str]:
+        """ROE ∩ authorization gate.
+
+        A command executes only when the target satisfies BOTH the
+        Rules-of-Engagement envelope and the operator attestation —
+        neither can widen the other.  The ROE kill-switch blocks all
+        dispatch.  Decisions are recorded in the audit trail.
+
+        Returns ``(allowed, reason)``.
+        """
+        target = self._execution_target(tool, args)
+        roe_scope = ""
+        auth_id = ""
+        if self.auth is not None:
+            auth_id = getattr(getattr(self.auth, "attestation", None), "authorization_id", "")
+
+        if self.roe is not None:
+            roe_scope = ", ".join(getattr(self.roe, "allowed_targets", []) or [])
+            allowed, reason = self.roe.is_target_allowed(target)
+            if not allowed:
+                self.log.warning("BLOCKED by ROE [%s] %s: %s", tool, target, reason)
+                if self.audit is not None:
+                    self.audit.command_blocked(
+                        tool=tool,
+                        target=target,
+                        command=command,
+                        reason=f"ROE: {reason}",
+                        roe_scope=roe_scope,
+                        authorization_id=auth_id,
+                    )
+                return False, f"[BLOCKED] ROE: {reason}"
+
+        if self.auth is not None:
+            allowed, reason = self.auth.check(target)
+            if not allowed:
+                self.log.warning("BLOCKED by authorization [%s] %s: %s", tool, target, reason)
+                if self.audit is not None:
+                    self.audit.command_blocked(
+                        tool=tool,
+                        target=target,
+                        command=command,
+                        reason=reason,
+                        roe_scope=roe_scope,
+                        authorization_id=auth_id,
+                    )
+                return False, f"[BLOCKED] {reason}"
+
+        if self.audit is not None:
+            self.audit.command_allowed(
+                tool=tool,
+                target=target,
+                command=command,
+                roe_scope=roe_scope,
+                authorization_id=auth_id,
+            )
+        return True, ""
 
     # ── IP sanitisation ───────────────────────────────────────────────────────
 
@@ -235,6 +320,14 @@ class Dispatcher:
                 rendered[:200],
             )
             return tool, f"[BLOCKED] {post_check.reason}", 0.0
+
+        # ── Phase 3: ROE ∩ authorization gate (single chokepoint) ────────────
+        # The command is fully built and sanitised; enforce that the target is
+        # allowed by BOTH the ROE envelope and the operator attestation.  Any
+        # block here returns [BLOCKED] and never reaches KaliAPI.
+        allowed, scope_reason = self._enforce_scope(tool, args, rendered)
+        if not allowed:
+            return tool, scope_reason, 0.0
 
         timeout = self._timeout_for(tool, action_input)
         t0 = time.time()

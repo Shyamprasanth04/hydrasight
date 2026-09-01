@@ -339,10 +339,26 @@ class TestShellSafety:
             patch("hydrasight.cli.shell.Engine"),
             patch("hydrasight.cli.shell.ChatController"),
             patch("hydrasight.cli.shell._setup_log", return_value=logging.getLogger("test")),
+            # avoid writing an audit log from the test shell
+            patch("hydrasight.cli.shell.AuditLogger"),
         ):
             from hydrasight.cli.shell import Shell
+            from hydrasight.security.authorization import ATTEST_PHRASE
 
             sh = Shell(cfg)
+
+        # Pre-authorize the standard lab ranges so dispatch-path tests run.
+        # (The Dispatcher itself is mocked in these tests; this satisfies the
+        # shell-level authorization gate.)
+        from hydrasight.security.authorization import AuthorizationManager
+
+        real_auth = AuthorizationManager()
+        accepted, msg = real_auth.record_interactive(
+            "test", ["192.168.0.0/16", "10.0.0.0/8"], ATTEST_PHRASE
+        )
+        assert accepted, msg
+        sh.auth = real_auth
+        sh._handlers.auth = real_auth
         return sh
 
     def _dispatch_called(self, shell) -> bool:

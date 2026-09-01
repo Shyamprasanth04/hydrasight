@@ -10,13 +10,18 @@ Changes from Phase 2:
   - Engagement can conclude professionally without exploitation.
 """
 
-import base64
+from __future__ import annotations
+
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.padding import Padding
 from rich.tree import Tree
+
+if TYPE_CHECKING:
+    from hydrasight.services.session_manager import SessionManager
 
 from hydrasight.cli.display import (
     analysis_panel,
@@ -36,6 +41,7 @@ from hydrasight.cli.display import (
     warn,
 )
 from hydrasight.config.defaults import PHASE_DEFS, P
+from hydrasight.core.hash_crack import build_crack_command, encode_hashes, parse_cracked_output
 from hydrasight.integrations.exploit_suggestion import (
     ExecutionMode,
     ExploitSuggestion,
@@ -69,7 +75,7 @@ class Engine:
         cfg: dict,
         log: logging.Logger,
         roe: RulesOfEngagement | None = None,
-        session_manager=None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         self.ai = ai
         self.kali = kali
@@ -698,18 +704,8 @@ class Engine:
                 "install: sudo apt install wordlists && gunzip /usr/share/wordlists/rockyou.txt.gz"
             )
             return
-        hash_lines = "\n".join(f"{h['username']}:$NT${h['ntlm']}" for h in self.findings.hashes)
-        b64 = base64.b64encode(hash_lines.encode()).decode()
-        cmd = (
-            f"HFILE=$(mktemp /tmp/hs_XXXXXX.txt) && "
-            f"printf '%s' '{b64}' | base64 -d > \"$HFILE\" && "
-            f"john --format=NT --wordlist={rockyou} "
-            f'"$HFILE" --pot=/tmp/hs.pot 2>&1 ; '
-            f"echo '---CRACKED---' ; "
-            f'john --format=NT --show "$HFILE" '
-            f"--pot=/tmp/hs.pot 2>&1 ; "
-            f'rm -f "$HFILE"'
-        )
+        hash_lines = encode_hashes(self.findings.hashes)
+        cmd = build_crack_command(hash_lines, rockyou)
         info(f"cracking {len(self.findings.hashes)} hashes with john")
         task_line("run_command")
         with spinner("running john") as prog:
@@ -722,26 +718,9 @@ class Engine:
         if not output:
             warn("john produced no output")
             return
-        import re
 
-        cracked_users: set[str] = set()
-        in_cracked = False
-        for line in output.splitlines():
-            line = line.strip()
-            if line == "---CRACKED---":
-                in_cracked = True
-                continue
-            if not in_cracked:
-                continue
-            m = re.match(r"^([^:]+):([^:$][^:]*?)(?::|$)", line)
-            if not m:
-                continue
-            user, pw = m.group(1).strip(), m.group(2).strip()
-            if not pw or len(pw) > 64 or user.isdigit():
-                continue
-            if user in cracked_users:
-                continue
-            cracked_users.add(user)
+        cracked = parse_cracked_output(output)
+        for user, pw in cracked.items():
             for h in self.findings.hashes:
                 if h["username"].lower() == user.lower() and not h["cracked"]:
                     h["cracked"] = pw
@@ -751,7 +730,7 @@ class Engine:
                 if "hash" in rec.name.lower() or "ntlm" in rec.name.lower():
                     rec.mark_proven(f"password cracked: {user}:{pw}")
             hit(f"cracked  {user}  →  {pw}")
-        found = len(cracked_users)
+        found = len(cracked)
         if found == 0:
             info("no passwords recovered from rockyou wordlist")
         else:

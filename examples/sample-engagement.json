@@ -1,0 +1,293 @@
+{
+  "reporting": {
+    "meta": {
+      "target": "10.10.10.15",
+      "started": "2026-09-01T09:00:00Z",
+      "completed": "2026-09-01 05:20:38",
+      "confirmed_risk": "CRITICAL",
+      "potential_risk": "CRITICAL",
+      "overall_risk": "CRITICAL"
+    },
+    "summary": {
+      "exploited_count": 1,
+      "verified_count": 0,
+      "supported_candidate_count": 1,
+      "no_strategy_candidate_count": 0,
+      "attempted_not_confirmed_count": 0,
+      "pending_count": 1,
+      "credential_count": 1,
+      "session_count": 1
+    },
+    "verification_coverage": {
+      "total": 3,
+      "attempted": 0,
+      "verified": 0,
+      "exploited": 1,
+      "failed": 0,
+      "no_strategy": 0,
+      "error": 0,
+      "not_applicable": 0,
+      "supported": 3,
+      "unsupported": 0
+    },
+    "findings": {
+      "exploited": [
+        {
+          "id": "7dbfff52",
+          "title": "MS17-010 EternalBlue (SMB RCE)",
+          "severity": "CRITICAL",
+          "canonical_status": "EXPLOITED",
+          "status_label": "PROVEN",
+          "verification_reason_code": "pending_verification",
+          "display_summary": "SMBv1 vulnerable; exploit confirmed SYSTEM shell.",
+          "display_evidence": "",
+          "display_remediation": "Review best practices for MS17-010 EternalBlue (SMB RCE).",
+          "port": 445,
+          "service": "microsoft-ds",
+          "source_tool": "",
+          "phase": "",
+          "cve": "",
+          "timestamp": "2026-09-01 05:20:38",
+          "appendix_only": false
+        }
+      ],
+      "verified": [],
+      "supported_candidates": [
+        {
+          "id": "e100578f",
+          "title": "RDP exposed",
+          "severity": "LOW",
+          "canonical_status": "SUPPORTED_CANDIDATE",
+          "status_label": "SUPPORTED CANDIDATE",
+          "verification_reason_code": "pending_verification",
+          "display_summary": "RDP reachable on 3389/tcp.",
+          "display_evidence": "",
+          "display_remediation": "Review best practices for RDP exposed.",
+          "port": 3389,
+          "service": "ms-wbt-server",
+          "source_tool": "",
+          "phase": "",
+          "cve": "",
+          "timestamp": "2026-09-01 05:20:38",
+          "appendix_only": false
+        }
+      ],
+      "no_strategy_candidates": [],
+      "attempted_not_confirmed": [],
+      "appendix_findings": []
+    },
+    "environment": {
+      "ports": [
+        {
+          "port": 445,
+          "proto": "tcp",
+          "service": "microsoft-ds",
+          "version": ""
+        },
+        {
+          "port": 3389,
+          "proto": "tcp",
+          "service": "ms-wbt-server",
+          "version": ""
+        },
+        {
+          "port": 80,
+          "proto": "tcp",
+          "service": "http",
+          "version": ""
+        }
+      ],
+      "credentials": [
+        {
+          "username": "administrator",
+          "secret": "P@ssw0rd-lab",
+          "kind": "password",
+          "source": "smb",
+          "ts": "2026-09-01 05:20:38"
+        }
+      ],
+      "sessions": [
+        {
+          "id": 1,
+          "type": "meterpreter",
+          "target": "10.10.10.15",
+          "via": "ms17_010_eternalblue",
+          "info": "SYSTEM",
+          "ts": "2026-09-01 05:20:38"
+        }
+      ],
+      "dirs": [],
+      "host_info": {
+        "os": "Windows Server 2019",
+        "hostname": "LAB-DC01"
+      },
+      "timeline": []
+    }
+  },
+  "_deprecated_legacy_raw": {
+    "meta": {
+      "version": "4.1.0",
+      "target": "10.10.10.15",
+      "started": "2026-09-01T09:00:00Z",
+      "completed": "2026-09-01 05:20:38",
+      "risk": "CRITICAL"
+    },
+    "summary": {
+      "ports": 3,
+      "vulns": 1,
+      "critical": 1,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "hashes": 1,
+      "credentials": 1,
+      "sessions": 1,
+      "dirs": 0,
+      "verified": 1,
+      "unverified": 0
+    },
+    "host_info": {
+      "os": "Windows Server 2019",
+      "hostname": "LAB-DC01"
+    },
+    "ports": [
+      {
+        "port": 445,
+        "proto": "tcp",
+        "service": "microsoft-ds",
+        "version": ""
+      },
+      {
+        "port": 3389,
+        "proto": "tcp",
+        "service": "ms-wbt-server",
+        "version": ""
+      },
+      {
+        "port": 80,
+        "proto": "tcp",
+        "service": "http",
+        "version": ""
+      }
+    ],
+    "vulns": [
+      {
+        "name": "MS17-010 EternalBlue",
+        "severity": "CRITICAL",
+        "description": "SMBv1 remote code execution via EternalBlue.",
+        "cve": "CVE-2017-0144",
+        "port": 445,
+        "ts": "2026-09-01 05:20:38"
+      }
+    ],
+    "finding_records": [
+      {
+        "id": "46890ce6",
+        "name": "MS17-010 EternalBlue",
+        "severity": "CRITICAL",
+        "description": "SMBv1 remote code execution via EternalBlue.",
+        "stage": "PLAUSIBLE",
+        "cve": "CVE-2017-0144",
+        "port": 445,
+        "service": "",
+        "phase": "",
+        "source_tool": "nmap",
+        "evidence": [],
+        "verified": false,
+        "confidence": 0.5,
+        "confidence_label": "MEDIUM",
+        "remediation": "",
+        "timestamp": "2026-09-01 05:20:38",
+        "verification_attempted": false,
+        "verification_outcome": "",
+        "verification_rationale": "",
+        "verification_evidence": "",
+        "verification_strategy": "",
+        "verification_state": "PENDING",
+        "verification_reason_code": "pending_verification"
+      },
+      {
+        "id": "7dbfff52",
+        "name": "MS17-010 EternalBlue (SMB RCE)",
+        "severity": "CRITICAL",
+        "description": "SMBv1 vulnerable; exploit confirmed SYSTEM shell.",
+        "stage": "EXPLOITED",
+        "cve": "",
+        "port": 445,
+        "service": "microsoft-ds",
+        "phase": "",
+        "source_tool": "",
+        "evidence": [],
+        "verified": false,
+        "confidence": 0.5,
+        "confidence_label": "MEDIUM",
+        "remediation": "",
+        "timestamp": "2026-09-01 05:20:38",
+        "verification_attempted": false,
+        "verification_outcome": "",
+        "verification_rationale": "",
+        "verification_evidence": "",
+        "verification_strategy": "",
+        "verification_state": "EXPLOITED",
+        "verification_reason_code": "pending_verification"
+      },
+      {
+        "id": "e100578f",
+        "name": "RDP exposed",
+        "severity": "LOW",
+        "description": "RDP reachable on 3389/tcp.",
+        "stage": "OBSERVED",
+        "cve": "",
+        "port": 3389,
+        "service": "ms-wbt-server",
+        "phase": "",
+        "source_tool": "",
+        "evidence": [],
+        "verified": false,
+        "confidence": 0.5,
+        "confidence_label": "MEDIUM",
+        "remediation": "",
+        "timestamp": "2026-09-01 05:20:38",
+        "verification_attempted": false,
+        "verification_outcome": "",
+        "verification_rationale": "",
+        "verification_evidence": "",
+        "verification_strategy": "",
+        "verification_state": "SUPPORTED_CANDIDATE",
+        "verification_reason_code": "pending_verification"
+      }
+    ],
+    "credentials": [
+      {
+        "username": "administrator",
+        "secret": "P@ssw0rd-lab",
+        "kind": "password",
+        "source": "smb",
+        "ts": "2026-09-01 05:20:38"
+      }
+    ],
+    "hashes": [
+      {
+        "username": "administrator",
+        "lm": "aad3b435b51404eeaad3b435b51404ee",
+        "ntlm": "31d6cfe0d16ae931b73c59d7e0c089c0",
+        "source": "hashdump",
+        "cracked": "",
+        "crackable": false,
+        "ts": "2026-09-01 05:20:38"
+      }
+    ],
+    "dirs": [],
+    "sessions": [
+      {
+        "id": 1,
+        "type": "meterpreter",
+        "target": "10.10.10.15",
+        "via": "ms17_010_eternalblue",
+        "info": "SYSTEM",
+        "ts": "2026-09-01 05:20:38"
+      }
+    ],
+    "timeline": []
+  }
+}

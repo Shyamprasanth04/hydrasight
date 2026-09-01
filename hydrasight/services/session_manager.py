@@ -80,7 +80,7 @@ class SessionManager:
             try:
                 with open(file_path, encoding="utf-8") as f:
                     data = json.load(f)
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 continue
 
             f_dict = data.get("findings", {})
@@ -114,7 +114,7 @@ class SessionManager:
         try:
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             return None
 
         findings = Findings.from_dict(data.get("findings", {}))

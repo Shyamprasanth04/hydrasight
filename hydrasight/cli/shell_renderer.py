@@ -450,32 +450,23 @@ def render_conclusion(findings: Findings) -> None:
 
     report = ReportModel.from_findings(f)
 
-    # Determine outcome prioritizing verified evidence
-    if report.sessions:
-        outcome, outcome_color = "POST-ACCESS", P.BRIGHT
-        outcome_desc = "Active session(s) established"
-    elif report.credentials:
-        outcome, outcome_color = "CREDENTIAL-LED", P.PRIMARY
-        outcome_desc = "Credentials recovered without session"
-    elif report.exploited_findings:
-        outcome, outcome_color = "EXPLOIT-CONFIRMED", P.BRIGHT
-        outcome_desc = "Vulnerabilities explicitly exploited"
-    elif report.verified_findings:
-        outcome, outcome_color = "VALIDATION", P.AMBER
-        outcome_desc = "Vulnerabilities independently verified"
-    elif (
-        report.supported_candidates
-        or report.no_strategy_candidates
-        or report.attempted_not_confirmed_findings
-    ):
-        outcome, outcome_color = "VULNERABILITY-CANDIDATES", P.AMBER
-        outcome_desc = "Candidate vulnerabilities identified"
-    elif report.ports:
-        outcome, outcome_color = "RECON-ONLY", P.DIM
-        outcome_desc = "Port/service discovery completed"
-    else:
-        outcome, outcome_color = "NO-FINDINGS", P.DIM
-        outcome_desc = "No actionable data collected"
+    # Classify the outcome (pure logic lives in reporting/outcome.py); the
+    # renderer only maps the outcome key to a display colour.
+    from hydrasight.reporting.outcome import OUTCOMES, classify_outcome
+
+    _OUTCOME_COLORS = {
+        "POST_ACCESS": P.BRIGHT,
+        "CREDENTIAL_LED": P.PRIMARY,
+        "EXPLOIT_CONFIRMED": P.BRIGHT,
+        "VALIDATION": P.AMBER,
+        "VULN_CANDIDATES": P.AMBER,
+        "RECON_ONLY": P.DIM,
+        "NO_FINDINGS": P.DIM,
+    }
+    result = classify_outcome(report)
+    outcome = result.label
+    outcome_color = _OUTCOME_COLORS.get(result.key, P.DIM)
+    outcome_desc = OUTCOMES[result.key].description
 
     console.print(f"  [{P.MUTED}]outcome[/]   [bold {outcome_color}]{outcome}[/]")
     console.print(f"  [{P.MUTED}]summary[/]   [{P.DIM}]{outcome_desc}[/]")

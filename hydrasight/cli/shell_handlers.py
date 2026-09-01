@@ -55,6 +55,7 @@ from hydrasight.config.defaults import TOOL_LABELS, P
 from hydrasight.parsers import Parser
 from hydrasight.reporting.json_reporter import save_json
 from hydrasight.reporting.pdf_reporter import generate_pdf
+from hydrasight.security.authorization import ATTEST_PHRASE, scope_is_valid
 from hydrasight.services.context_builder import ContextBuilder
 from hydrasight.services.execution_policy import VALID_MODES
 from hydrasight.services.intent_classifier import Intent
@@ -66,6 +67,8 @@ if TYPE_CHECKING:
     from hydrasight.integrations.kali_api import KaliAPI
     from hydrasight.models.findings import Findings
     from hydrasight.models.roe import RulesOfEngagement
+    from hydrasight.security.audit import AuditLogger
+    from hydrasight.security.authorization import AuthorizationManager
     from hydrasight.services.action_planner import ActionPlanner, PendingAction
     from hydrasight.services.ai_client import AIClient
     from hydrasight.services.chat_controller import ChatController
@@ -103,6 +106,8 @@ class ShellHandlers:
         roe: RulesOfEngagement,
         log: logging.Logger,
         session_manager: SessionManager | None = None,
+        auth: AuthorizationManager | None = None,
+        audit: AuditLogger | None = None,
     ) -> None:
         self.cfg = cfg
         self.findings = findings
@@ -118,9 +123,35 @@ class ShellHandlers:
         self.roe = roe
         self.log = log
         self.session_manager = session_manager
+        self.auth = auth
+        self.audit = audit
         self.start_time = time.time()
         self.tool_count = 0
         self.verbosity = cfg["verbosity"]
+
+    # ── authorization gate (defense-in-depth at every shell execution path) ──
+
+    def _authorized_for(self, target: str | None) -> bool:
+        """True iff the current execution path may act on *target*.
+
+        When no AuthorizationManager is wired (plain unit tests) this is
+        permissive.  With a manager wired it is deny-by-default.
+        """
+        if self.auth is None:
+            return True
+        if not target:
+            warn("no target to authorize — set a target first")
+            return False
+        accepted, msg = self.auth.check(target)
+        if not accepted:
+            err(
+                f"not authorized for {target}: {msg}\n"
+                f"  run [bold]authorize <ip|cidr>[/] and type [bold]{ATTEST_PHRASE}[/]"
+            )
+            if self.audit is not None:
+                self.audit.authorization_denied(target=str(target), reason=msg)
+            return False
+        return True
 
     # ── output directory ──────────────────────────────────────────────────────
 
@@ -292,6 +323,8 @@ class ShellHandlers:
             if not target or not is_valid_ip(target):
                 err(f"invalid target ip: {target}")
                 return
+            if not self._authorized_for(target):
+                return
             kali_ok, _ = self.kali.health()
             ai_ok, _ = self.ai.health()
             if not kali_ok:
@@ -312,6 +345,9 @@ class ShellHandlers:
         tool_call = action.tool_call
         if not tool_call:
             err("no tool_call in pending action")
+            return
+
+        if not self._authorized_for(action.target):
             return
 
         tool_label = TOOL_LABELS.get(tool_call.get("tool", ""), tool_call.get("tool", "?"))
@@ -363,6 +399,9 @@ class ShellHandlers:
 
         if not is_valid_ip(target):
             err(f"invalid ip extracted: {target}")
+            return
+
+        if not self._authorized_for(target):
             return
 
         routed = route_intent(action_text, target)
@@ -469,6 +508,8 @@ class ShellHandlers:
             self.engine.abort()
         elif cmd == "roe":
             render_roe(self.roe, self.ROE_FILE)
+        elif cmd == "authorize":
+            self._handle_authorize(parts)
         elif cmd == "verify":
             self.handle_verify()
         elif cmd == "suggest":
@@ -509,6 +550,67 @@ class ShellHandlers:
 
     # ── specific builtin handlers ─────────────────────────────────────────────
 
+    def _handle_authorize(self, parts: list[str]) -> None:
+        """REPL ``authorize [ip|cidr …]`` command.
+
+        With no scope argument, prints the currently active scope.  With a
+        scope, prompts the operator to type the attestation phrase exactly.
+        Once set, the scope is locked for the session (reset with ``clear``
+        or a new session).
+        """
+        if self.auth is None:
+            warn("authorization subsystem unavailable")
+            return
+
+        scope = [p.strip() for p in parts[1:] if p.strip()]
+
+        # No argument → report current scope.
+        if not scope:
+            current = self.auth.scope_summary()
+            info(f"authorized scope: {current}")
+            if not self.auth.is_active:
+                warn(f"usage: authorize <ip|cidr> …  then type {ATTEST_PHRASE!r}")
+            return
+
+        # Scope already locked?
+        if self.auth.is_active:
+            warn(
+                f"scope already locked to {self.auth.scope_summary()} — "
+                "run 'clear' to reset before changing scope"
+            )
+            return
+
+        if not scope_is_valid(scope):
+            err("invalid scope — supply one or more IP/CIDR entries, e.g. authorize 10.0.0.0/8")
+            return
+
+        info(f"about to authorize testing of scope: {', '.join(scope)}")
+        info(
+            f"only authorize targets you own or have explicit written permission to test. "
+            f"type {ATTEST_PHRASE!r} exactly to confirm, anything else cancels."
+        )
+        try:
+            phrase = console.input(f"  [{P.AMBER}]attest ›[/] ").strip()
+        except EOFError:
+            phrase = ""
+
+        operator = str(self.cfg.get("operator", "operator"))
+        accepted, msg = self.auth.record_interactive(operator, scope, phrase)
+        if accepted:
+            ok(msg)
+            if self.audit is not None:
+                self.audit.authorization_granted(
+                    reason=msg,
+                    scope=", ".join(scope),
+                    authorization_id=(
+                        self.auth.attestation.authorization_id if self.auth.attestation else ""
+                    ),
+                )
+        else:
+            err(msg)
+            if self.audit is not None:
+                self.audit.authorization_denied(target="", reason=msg, scope=", ".join(scope))
+
     def _handle_mode(self, parts: list[str]) -> None:
         if len(parts) >= 2 and parts[1].lower() in VALID_MODES:
             new_mode = parts[1].lower()
@@ -542,6 +644,8 @@ class ShellHandlers:
         if not is_valid_ip(target):
             err(f"invalid ip: {target}")
             return
+        if not self._authorized_for(target):
+            return
         kali_ok, _ = self.kali.health()
         ai_ok, _ = self.ai.health()
         if not kali_ok:
@@ -570,6 +674,8 @@ class ShellHandlers:
         target = parts[1]
         if not is_valid_ip(target):
             err(f"invalid ip: {target}")
+            return
+        if not self._authorized_for(target):
             return
         info(f"deep scan on {target}")
         self.dispatcher.canonical_target = target

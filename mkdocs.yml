@@ -1,0 +1,55 @@
+site_name: HydraSight
+site_description: AI-assisted, authorization-gated offensive-security orchestration framework
+site_author: Shyam Prasanth
+repo_url: https://github.com/Shyamprasanth04/hydrasight
+repo_name: Shyamprasanth04/hydrasight
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: green
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Configuration: configuration.md
+  - Security Model: security.md
+  - Authorization & Audit: authorization-audit.md
+  - Rules of Engagement: rules-of-engagement.md
+  - Usage: usage.md
+  - Tools: tools.md
+  - Reports: reports.md
+  - Architecture: architecture.md
+  - Extending HydraSight: extending.md
+  - Development: development.md
+  - FAQ: faq.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - toc:
+      permalink: true
