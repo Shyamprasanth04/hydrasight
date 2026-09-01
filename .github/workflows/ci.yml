@@ -36,18 +36,36 @@ jobs:
       - name: Pylint
         run: pylint hydrasight/ --fail-under=9.0
 
-      - name: Mypy (type check)
+      - name: Mypy (strict function contracts)
         run: mypy hydrasight/ --ignore-missing-imports
 
       - name: Compile check
         run: python -m compileall hydrasight/ tests/
 
-      - name: Pytest
-        run: pytest tests/ -v --tb=short --cov=hydrasight --cov-report=term-missing
+      - name: Pytest with coverage floor
+        run: |
+          pytest tests/ -p no:ethereum \
+            --cov=hydrasight --cov-branch \
+            --cov-report=term-missing \
+            --cov-fail-under=75
 
-      - name: Upload coverage report
+      - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: matrix.python-version == '3.11'
         with:
           name: coverage-report
           path: .coverage
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with docs extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]"
+      - name: Build docs (strict)
+        run: mkdocs build --strict
