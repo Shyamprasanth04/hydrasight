@@ -1,0 +1,11 @@
+{
+  "_comment": "Pre-signed operator authorization for CI/CTF/unattended runs. Copy to hydrasight.authorization.json and set scope to ONLY the IPs/CIDRs you are explicitly authorized to test. HydraSight is deny-by-default: no attestation means no execution.",
+  "operator": "your-name-or-ci-service-account",
+  "scope": [
+    "10.10.10.0/24",
+    "192.168.56.10"
+  ],
+  "reference": "ROE / engagement ticket / written authorization reference",
+  "phrase_confirmed": true,
+  "expires_after_minutes": 480
+}

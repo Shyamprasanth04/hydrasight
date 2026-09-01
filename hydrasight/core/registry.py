@@ -6,7 +6,7 @@ class ActionRegistryError(Exception):
 
 
 class ActionRegistry:
-    def __init__(self):
+    def __init__(self) -> None:
         self._actions: dict[str, ActionDefinition] = {}
         self._aliases: dict[str, str] = {}
 

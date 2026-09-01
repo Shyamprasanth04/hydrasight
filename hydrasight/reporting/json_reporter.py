@@ -25,6 +25,8 @@ def save_json(findings: Findings, path: str) -> bool:
             json.dump(out, fh, indent=2, default=str)
         log.info("saved json: %s", path)
         return True
-    except (OSError, PermissionError) as exc:
+    except (OSError, ValueError, TypeError) as exc:
+        # OSError: fs/permission; ValueError: bad path (e.g. embedded NUL) or
+        # unserializable object; TypeError: wrong path/argument type.
         log.error("json save failed: %s", exc)
         return False

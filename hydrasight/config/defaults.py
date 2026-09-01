@@ -5,10 +5,9 @@ and all module-level constants for HydraSight.
 
 from typing import Any
 
-# ── version ───────────────────────────────────────────────────────────────────
-VERSION = "4.0.0"
-CODENAME = "OBSIDIAN"
-APP_NAME = "HydraSight"
+from hydrasight.constants import APP_NAME, CODENAME, VERSION
+
+__all__ = ["VERSION", "CODENAME", "APP_NAME"]
 
 
 # ── colour palette ────────────────────────────────────────────────────────────
@@ -103,6 +102,7 @@ _CONFIG_ALLOWED_KEYS = frozenset(
         "wordlist",
         "rockyou_path",
         "execution_mode",  # confirm | auto | never
+        "operator",  # operator identity stamped onto audit records
         "ollama_options_orchestrator",  # per-call Ollama options for tool orchestration
         "ollama_options_chat",  # per-call Ollama options for conversational path
     }
@@ -154,6 +154,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     #   auto             — high-confidence requests run without confirmation
     #   never            — NL never executes tools, only explains/suggests
     "execution_mode": "confirm",
+    # Operator identity stamped onto audit-trail records.
+    "operator": "operator",
     "ollama_options_orchestrator": _DEFAULT_OLLAMA_OPTIONS_ORCHESTRATOR,
     "ollama_options_chat": _DEFAULT_OLLAMA_OPTIONS_CHAT,
 }

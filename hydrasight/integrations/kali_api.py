@@ -25,7 +25,8 @@ class KaliAPI:
             return False, "connection refused — run: kali-server-mcp"
         except requests.Timeout:
             return False, "timeout"
-        except Exception as exc:  # noqa: BLE001
+        except requests.RequestException as exc:
+            self.log.error("health request error: %s", exc)
             return False, str(exc)
 
     def run(self, command: str, timeout: int = 300) -> dict:
@@ -74,7 +75,17 @@ class KaliAPI:
                 "success": False,
                 "timed_out": False,
             }
-        except Exception as exc:  # noqa: BLE001
+        except ValueError as exc:
+            # Invalid JSON payload from the API.
+            self.log.error("API returned invalid JSON: %s", exc)
+            return {
+                "output": "",
+                "error": f"invalid JSON from API: {exc}",
+                "returncode": -1,
+                "success": False,
+                "timed_out": False,
+            }
+        except requests.RequestException as exc:
             self.log.error("API error: %s", exc)
             return {
                 "output": "",
@@ -97,7 +108,13 @@ class KaliAPI:
     def check_target(self, target: str) -> dict:
         res = self.run(f"ping -c 2 -W 2 {target} 2>&1 | tail -3", timeout=15)
         out = res.get("output", "").lower()
+        # NOTE: "0% packet loss" is a substring of "100% packet loss", so a
+        # naive `in` test marks a fully-dropping host as reachable.  Match a
+        # real received count, or a loss percentage that is NOT "100%".
+        reachable = bool(
+            re.search(r"\b[1-9]\d* received", out) or re.search(r"(?<!\d)0% packet loss", out)
+        )
         return {
-            "reachable": ("0% packet loss" in out or "1 received" in out or "2 received" in out),
+            "reachable": reachable,
             "output": res.get("output", ""),
         }

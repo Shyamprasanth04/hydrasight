@@ -448,8 +448,9 @@ class Findings:
             try:
                 rec = FindingRecord.from_dict(rec_data)
                 f.finding_records.append(rec)
-            except Exception:
-                pass
+            except (KeyError, TypeError, ValueError):
+                # Skip malformed records rather than failing the whole load.
+                continue
 
         f.credentials = data.get("credentials", [])
         f.hashes = data.get("hashes", [])

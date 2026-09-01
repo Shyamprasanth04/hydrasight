@@ -1,0 +1,9 @@
+# Code owners — default review for all changes, with extra scrutiny on
+# the security/accountability surface and command construction.
+
+* @Shyamprasanth04
+
+# Security & accountability — changes here warrant careful review.
+/hydrasight/security/            @Shyamprasanth04
+/hydrasight/services/dispatcher.py @Shyamprasanth04
+/hydrasight/core/command_builder.py @Shyamprasanth04

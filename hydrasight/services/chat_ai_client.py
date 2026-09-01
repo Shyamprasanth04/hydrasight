@@ -120,7 +120,8 @@ class ChatAIClient:
                 self.log.error("chat timeout attempt %d", attempt)
             except requests.ConnectionError:
                 self.log.error("chat connection lost attempt %d", attempt)
-            except Exception as exc:  # noqa: BLE001
+            except (requests.RequestException, ValueError) as exc:
+                # HTTP errors (raise_for_status) and malformed JSON responses.
                 self.log.error("chat error attempt %d: %s", attempt, exc)
             if attempt < retries:
                 time.sleep(delay)

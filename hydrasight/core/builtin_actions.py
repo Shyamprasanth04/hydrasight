@@ -2,7 +2,7 @@ from hydrasight.core.registry import registry
 from hydrasight.models.actions import ActionArgSchema, ActionDefinition, ROECategory
 
 
-def register_builtins():
+def register_builtins() -> None:
     registry.register(
         ActionDefinition(
             action_id="nmap_scan",

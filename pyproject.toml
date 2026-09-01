@@ -4,11 +4,37 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hydrasight"
-version = "4.0.0"
-description = "AI-assisted offensive security orchestration framework for authorized environments"
+dynamic = ["version"]
+description = "AI-assisted, authorization-gated offensive-security orchestration framework for authorized environments"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
+authors = [
+    { name = "Shyam Prasanth" },
+]
+keywords = [
+    "security",
+    "penetration-testing",
+    "offensive-security",
+    "ai",
+    "llm",
+    "orchestration",
+    "audit",
+    "authorization",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
 dependencies = [
     "requests>=2.31",
     "rich>=13.0",
@@ -26,14 +52,32 @@ dev = [
     "isort>=5.13",
     "python-dotenv>=1.0",
     "types-requests>=2.31.0",
+    "build>=1.2",
+    "twine>=5.0",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
 ]
 dotenv = ["python-dotenv>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/Shyamprasanth04/hydrasight"
+Repository = "https://github.com/Shyamprasanth04/hydrasight"
+Documentation = "https://github.com/Shyamprasanth04/hydrasight#readme"
+"Bug Tracker" = "https://github.com/Shyamprasanth04/hydrasight/issues"
+Changelog = "https://github.com/Shyamprasanth04/hydrasight/blob/main/CHANGELOG.md"
 
 [project.scripts]
 hydrasight = "hydrasight.__main__:main"
 
+# Single source of truth for the package layout. Do NOT also declare
+# `[tool.setuptools] packages = [...]` — that raises a "declared twice" error.
 [tool.setuptools.packages.find]
 include = ["hydrasight*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "hydrasight.__version__" }
 
 [tool.ruff]
 line-length = 100
@@ -48,10 +92,33 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+strict_equality = true
+no_implicit_optional = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.coverage.run]
+branch = true
+source = ["hydrasight"]
+omit = [
+    "hydrasight/__main__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
 
 [tool.isort]
 profile = "black"

@@ -17,7 +17,7 @@ import logging
 
 from hydrasight.config.defaults import VERSION
 from hydrasight.models.findings import Findings
-from hydrasight.models.report_model import ReportModel
+from hydrasight.models.report_model import ReportItem, ReportModel
 from hydrasight.utils.time_utils import ts
 
 log = logging.getLogger("hydrasight")
@@ -261,7 +261,7 @@ def generate_pdf(
     ]
 
     # Helper to render a finding block
-    def render_finding_block(rec, label_text, label_color):
+    def render_finding_block(rec: ReportItem, label_text: str, label_color: object) -> object:
         sc = sev_colors.get(rec.severity, grey)
         block = [
             RLTable(

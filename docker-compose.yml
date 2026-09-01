@@ -1,0 +1,32 @@
+services:
+  hydrasight:
+    build: .
+    image: hydrasight:latest
+    stdin_open: true
+    tty: true
+    environment:
+      # Reach the host's Ollama and the Kali bridge from inside the container.
+      HYDRA_OLLAMA_URL: "http://host.docker.internal:11434"
+      HYDRA_KALI_URL: "http://kali:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Bind-mount configuration, ROE and (optional) pre-signed authorization.
+      - ./hydrasight.json:/app/hydrasight.json:ro
+      - ./hydrasight.roe.json:/app/hydrasight.roe.json:ro
+      - ./hydrasight.authorization.json:/app/hydrasight.authorization.json:ro
+      - ./hydrasight_output:/app/hydrasight_output
+    depends_on:
+      - kali
+
+  kali:
+    # Kali bridge providing the REST command API. Build/use your preferred
+    # kali-server-mcp image; the orchestrator never ships offensive tooling.
+    image: kalilinux/kali-rolling:latest
+    command: >
+      sh -c "apt-get update &&
+             apt-get install -y python3-pip nmap &&
+             echo 'Run kali-server-mcp on 0.0.0.0:5000 inside this service' &&
+             sleep infinity"
+    ports:
+      - "5000:5000"
