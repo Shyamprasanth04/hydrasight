@@ -88,7 +88,7 @@ hydrasight/
 │   └── utils/
 │       ├── ip_utils.py          ← IP validation, CIDR checks, dedup_ports
 │       └── time_utils.py        ← ts() timestamp helper
-├── tests/                       ← 665 pytest tests (all offline, all mocked)
+├── tests/                       ← 797 pytest tests (all offline, all mocked)
 │   ├── test_command_sanitizer.py ← security gate (largest, 134 tests)
 │   ├── test_command_router.py   ← CommandRouter classification tests
 │   ├── test_engine.py           ← engagement engine: recon/planning/exploit/hash-crack
