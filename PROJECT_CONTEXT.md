@@ -2,7 +2,7 @@
 
 > **Version:** 4.0.0  
 > **Type:** Python CLI — AI-assisted offensive security orchestration framework  
-> **Status:** Active development. Phase 1–4 complete. 665/665 tests passing.  
+> **Status:** Active development. Phase 1–4 complete. 797/797 tests passing.  
 > **Default local model:** `qcwind/qwen3-8b-instruct-Q4-K-M:latest` (Ollama)
 
 ---
@@ -83,7 +83,7 @@ hydrasight/
 │   │   ├── confirmation_manager.py ← ConfirmationManager — yes/no pending action state
 │   │   ├── execution_policy.py  ← ExecutionPolicy — confirm / auto / never modes
 │   │   ├── dispatcher.py        ← Dispatcher — executes tool_call dicts via KaliAPI
-│   │   ├── post_access.py       ← PostAccessHandler — Meterpreter, Shell, SSH, FTP, WebAdmin
+│   │   ├── post_access/         ← PostAccessHandler package — Meterpreter, Shell, SSH, FTP, WebAdmin
 │   │   └── verifier.py          ← VerifierService — second-pass targeted finding verification
 │   └── utils/
 │       ├── ip_utils.py          ← IP validation, CIDR checks, dedup_ports

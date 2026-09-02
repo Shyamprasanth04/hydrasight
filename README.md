@@ -13,7 +13,7 @@
 
 [![Version](https://img.shields.io/badge/version-4.0.0-blue?style=for-the-badge&logo=github)](https://github.com/Shyamprasanth04/hydrasight/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-665%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
+[![Tests](https://img.shields.io/badge/tests-797%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
 [![CI](https://img.shields.io/badge/CI-ruff%20%7C%20mypy%20%7C%20pylint-success?style=for-the-badge)](./.github/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge)](./LICENSE)
 [![Ollama](https://img.shields.io/badge/AI-Ollama%20%28local%29-ff6b35?style=for-the-badge&logo=llama&logoColor=white)](https://ollama.com/)
@@ -67,7 +67,7 @@ hydrasight › enumerate smb shares on 10.129.74.47
 | **Findings State** | Shared mutable state: ports, vulns, credentials, hashes, sessions, dirs, timeline |
 | **Reporting** | Auto-generated JSON + PDF reports via ReportLab |
 | **UI** | Rich terminal panels, tables, spinners — full REPL with history |
-| **Test Suite** | 665 pytest tests, all offline, all mocked — no network required |
+| **Test Suite** | 797 pytest tests, all offline, all mocked — no network required |
 | **CI Gates** | `ruff` lint+format, `mypy` strict-ish types, `pylint` ≥ 9.0, pytest + coverage |
 
 ---
@@ -229,13 +229,13 @@ hydrasight/
 │   │   ├── ai_client.py         # AIClient — engine tool-calling LLM
 │   │   ├── chat_ai_client.py    # ChatAIClient — conversational LLM only
 │   │   ├── verifier.py          # Second-pass finding verification
-│   │   ├── post_access.py       # Post-exploitation orchestration
+│   │   ├── post_access/         # Post-exploitation handler package
 │   │   ├── session_manager.py   # Session autosave/restore
 │   │   └── context_builder.py   # LLM context window builder
 │   └── utils/
 │       ├── ip_utils.py           # IP validation, force_ip(), CIDR helpers
 │       └── time_utils.py         # Elapsed time formatting
-├── tests/                        # 665 pytest tests — all offline
+├── tests/                        # 797 pytest tests — all offline
 │   ├── test_nl_pipeline.py       # 31 tests — NL intent classification
 │   ├── test_command_router.py    # CommandRouter classification
 │   ├── test_command_sanitizer.py # Security gate validation
@@ -471,7 +471,7 @@ export HYDRA_VERBOSITY=2
 
 ## Tests
 
-HydraSight has **665 pytest tests** — all fully offline, all network calls mocked.
+HydraSight has **797 pytest tests** — all fully offline, all network calls mocked.
 
 ```bash
 # Run full test suite
