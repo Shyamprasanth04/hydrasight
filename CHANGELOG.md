@@ -5,7 +5,7 @@ All notable changes to HydraSight are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.1.0] — OBSIDIAN
+## [4.1.0] — OBSIDIAN (2026-09-02)
 
 Evolves HydraSight into an installable, trustworthy offensive-security product.
 
@@ -32,7 +32,7 @@ Evolves HydraSight into an installable, trustworthy offensive-security product.
 - MkDocs Material documentation site (builds `--strict`); CHANGELOG; CODEOWNERS.
 - CI: ruff + mypy (strict function contracts) + pylint + pytest with a 75%
   branch-coverage floor + a strict docs job. `release.yml` publishes to PyPI via
-  trusted publisher (OIDC) on `v*` tags and drafts a GitHub Release.
+  trusted publisher (OIDC) on `v*` tags and publishes a GitHub Release.
 
 ### Reliability & architecture
 
@@ -43,7 +43,13 @@ Evolves HydraSight into an installable, trustworthy offensive-security product.
   engagement-outcome classification extracted to `reporting/outcome.py`.
 - Fixed: `check_target` false-positive on "100% packet loss"; `save_json`
   leaking `ValueError` on invalid paths.
-- Added unit tests bringing the suite to ~787 tests with ~76% branch coverage.
+- Added unit tests; final shipped suite: **797 tests, 75.75% branch coverage**
+  (enforced as the CI `--cov-fail-under=75` floor).
+- The 617-line shadowed legacy `services/post_access.py` left by the package
+  refactor was removed before tagging, and release docs were aligned to the
+  shipped state.
+- Shipped: published to PyPI via **OIDC trusted publishing** (zero API tokens)
+  with an attached GitHub Release.
 
 ### Public API notes
 

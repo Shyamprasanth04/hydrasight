@@ -43,11 +43,11 @@ python -m build
 - **Exceptions**: catch specific exception types at network/IO boundaries;
   reserve broad catches for genuine last-resort boundaries (REPL loop,
   per-finding verifier isolation, PDF build) and mark them `# noqa: BLE001`.
-- **Tests**: keep the suite green; add coverage for new modules (target
-  ~76% branch).
+- **Tests**: keep the suite green; add coverage for new modules (75.75% branch
+  measured; CI floors at 75%).
 
 ## Release
 
 See `RELEASING.md`. Merged PRs are tagged `vX.Y.Z`; the `release.yml`
 workflow builds, twine-checks, publishes to PyPI via trusted publishing
-(OIDC), and drafts a GitHub Release.
+(OIDC), and publishes a GitHub Release.

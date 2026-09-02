@@ -28,7 +28,9 @@ in the repository root.
 - MkDocs Material documentation site (builds `--strict`); CHANGELOG; CODEOWNERS.
 - CI: ruff + mypy (strict function contracts) + pylint + pytest with a 75%
   branch-coverage floor and a strict docs job. `release.yml` publishes to PyPI
-  via trusted publisher on `v*` tags and drafts a GitHub Release.
+  via trusted publisher on `v*` tags and publishes a GitHub Release.
+- One-line install: `pip install hydrasight` — the PyPI project was
+  auto-created by the first trusted-publishing run (no manual registration).
 
 ### Reliability & architecture
 - Broad `except Exception` at network/IO boundaries narrowed to specific types.

@@ -11,7 +11,8 @@
 
 **AI-Assisted Offensive Security Orchestration — For Authorized Lab Environments**
 
-[![Version](https://img.shields.io/badge/version-4.0.0-blue?style=for-the-badge&logo=github)](https://github.com/Shyamprasanth04/hydrasight/releases)
+[![Version](https://img.shields.io/badge/version-4.1.0-blue?style=for-the-badge&logo=github)](https://github.com/Shyamprasanth04/hydrasight/releases/tag/v4.1.0)
+[![PyPI](https://img.shields.io/pypi/v/hydrasight?style=for-the-badge&logo=pypi&logoColor=white)](https://pypi.org/project/hydrasight/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-797%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](./tests/)
 [![CI](https://img.shields.io/badge/CI-ruff%20%7C%20mypy%20%7C%20pylint-success?style=for-the-badge)](./.github/workflows/ci.yml)
@@ -275,7 +276,14 @@ hydrasight/
 | Kali Linux | Rolling | VM or bare-metal |
 | [kali-linux-mcp](https://github.com/digininja/kali-linux-mcp) | Latest | Installed on Kali |
 
-### 1. Clone & Install
+### 1. Install
+
+```bash
+# From PyPI (recommended)
+pip install hydrasight
+```
+
+For development — editable install with the full dev toolchain:
 
 ```bash
 git clone https://github.com/Shyamprasanth04/hydrasight.git
@@ -343,7 +351,7 @@ python -m hydrasight
 You should see the Rich REPL prompt:
 
 ```
- HydraSight v4.0.0  ─  AI Offensive Security Console
+ HydraSight v4.1.0  ─  AI Offensive Security Console
  Ollama: ✔ ready  │  Kali API: ✔ ready
 ─────────────────────────────────────────────────────
 hydrasight ›
