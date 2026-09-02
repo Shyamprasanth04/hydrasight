@@ -33,7 +33,7 @@ HydraSight is a local, interactive penetration-testing assistant designed for **
 | Tool backend | Kali Linux MCP server (`/api/command`, default port 5000) |
 | PDF reports | ReportLab |
 | Package | `pyproject.toml`, editable install `pip install -e ".[dev]"` |
-| Tests | pytest (665 tests, no network, all mocked) |
+| Tests | pytest (797 tests, no network, all mocked) |
 | Lint/CI | ruff (lint + format), pylint (≥9.0), mypy |
 
 ---
@@ -308,7 +308,7 @@ TOOL_TIMEOUTS = {
 Run all tests (no network required, all mocked):
 ```bash
 python -m pytest tests/ -q -p no:ethereum
-# 665 passed
+# 797 passed
 ```
 
 Key test files:
