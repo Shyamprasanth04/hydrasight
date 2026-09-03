@@ -91,7 +91,7 @@ Three properties are architectural, not aspirational:
 |---|---|---|
 | Python | 3.10 – 3.12 | Any OS that can reach Ollama and the bridge (execution happens on Kali); console verified on Linux and Windows |
 | [Ollama](https://ollama.com) | latest | Any chat model; default: `qcwind/qwen3-8b-instruct-Q4-K-M:latest` |
-| Kali Linux + [kali-linux-mcp](https://github.com/digininja/kali-linux-mcp) | rolling / latest | Executes the tools; run `kali-linux-mcp --transport sse` on `:5000` |
+| Kali Linux + [kali-linux-mcp](https://github.com/digininja/kali-linux-mcp) | rolling | On Kali: `sudo apt install mcp-kali-server`, then start the bridge with `kali-server-mcp` (serves the API on `:5000`) |
 
 ### Install & configure
 

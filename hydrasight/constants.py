@@ -8,7 +8,7 @@ the dunder attributes (``__version__`` etc.) used by packaging tooling.
 
 from __future__ import annotations
 
-__version__ = "4.1.0"
+__version__ = "4.1.1"
 __codename__ = "OBSIDIAN"
 __app_name__ = "HydraSight"
 __title__ = "HydraSight"
