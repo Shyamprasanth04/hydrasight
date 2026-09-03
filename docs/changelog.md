@@ -8,6 +8,16 @@ The canonical changelog is
 [`CHANGELOG.md`](https://github.com/Shyamprasanth04/hydrasight/blob/main/CHANGELOG.md)
 in the repository root.
 
+## 4.1.1
+
+### Fixed
+- `help` documents `authorize`, `roe`, `resume`, and the `exit / quit`
+  synonym — new `AUTHORIZATION` section leads the reference.
+
+### Changed
+- Bridge setup for current Kali packaging: `sudo apt install mcp-kali-server`,
+  start with `kali-server-mcp`.
+
 ## 4.1.0 — OBSIDIAN
 
 ### Security & accountability

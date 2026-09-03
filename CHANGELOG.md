@@ -5,7 +5,7 @@ All notable changes to HydraSight are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.1.1] — 2026-09-03
 
 ### Fixed
 - `help` reference omitted the **`authorize`** command (the mandatory
@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `help` now lists `resume` and documents the `exit / quit` synonym.
 
 ### Changed
+- README: bridge setup updated for current Kali packaging
+  (`sudo apt install mcp-kali-server`, run `kali-server-mcp`) — the pip-era
+  `--transport sse` invocation no longer matches the apt binary.
 - README: console OS support restated honestly — verified on Windows in
   addition to Linux (execution still happens on the Kali bridge).
 
