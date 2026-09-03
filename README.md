@@ -89,7 +89,7 @@ Three properties are architectural, not aspirational:
 
 | Component | Version | Notes |
 |---|---|---|
-| Python | 3.10 – 3.12 | Linux console (Kali, Parrot, or any host that can reach the bridge) |
+| Python | 3.10 – 3.12 | Any OS that can reach Ollama and the bridge (execution happens on Kali); console verified on Linux and Windows |
 | [Ollama](https://ollama.com) | latest | Any chat model; default: `qcwind/qwen3-8b-instruct-Q4-K-M:latest` |
 | Kali Linux + [kali-linux-mcp](https://github.com/digininja/kali-linux-mcp) | rolling / latest | Executes the tools; run `kali-linux-mcp --transport sse` on `:5000` |
 

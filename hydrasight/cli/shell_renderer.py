@@ -330,12 +330,23 @@ def render_help() -> None:
     console.print()
     sections = [
         (
+            "AUTHORIZATION",
+            [
+                (
+                    "authorize [ip|cidr …]",
+                    "attest testing scope — required before any target; without args shows the active scope",
+                ),
+                ("roe", "show active rules of engagement"),
+            ],
+        ),
+        (
             "ENGAGEMENT",
             [
                 ("autopwn <ip>", "adaptive full-spectrum assessment"),
                 ("scan <ip>", "deep port scan only"),
                 ("abort", "abort current engagement"),
                 ("verify", "run targeted verification on findings"),
+                ("resume", "resume last saved engagement session"),
             ],
         ),
         (
@@ -392,7 +403,7 @@ def render_help() -> None:
                 ("verbose 0-3", "set output level"),
                 ("clear", "reset session state"),
                 ("help", "this reference"),
-                ("exit", "save and quit"),
+                ("exit / quit", "save and quit"),
             ],
         ),
     ]

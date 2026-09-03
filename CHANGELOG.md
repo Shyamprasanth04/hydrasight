@@ -5,6 +5,19 @@ All notable changes to HydraSight are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `help` reference omitted the **`authorize`** command (the mandatory
+  scope attestation) and **`roe`**; added a dedicated `AUTHORIZATION`
+  section above `ENGAGEMENT` so the first step of any engagement is
+  discoverable.
+- `help` now lists `resume` and documents the `exit / quit` synonym.
+
+### Changed
+- README: console OS support restated honestly — verified on Windows in
+  addition to Linux (execution still happens on the Kali bridge).
+
 ## [4.1.0] — OBSIDIAN (2026-09-02)
 
 Evolves HydraSight into an installable, trustworthy offensive-security product.
