@@ -8,6 +8,14 @@ The canonical changelog is
 [`CHANGELOG.md`](https://github.com/Shyamprasanth04/hydrasight/blob/main/CHANGELOG.md)
 in the repository root.
 
+## Unreleased
+
+### Fixed
+- `KaliAPI.health()` reports a bridge as online even when its build lacks the
+  `GET /health` route (older `mcp-kali-server` packages only serve
+  `POST /api/command`) — the check falls back to a harmless `whoami` command
+  probe.
+
 ## 4.1.1
 
 ### Fixed

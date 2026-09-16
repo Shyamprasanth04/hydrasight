@@ -56,7 +56,7 @@ hydrasight/
 │   │   │                           _plan_phases, _exploitation_phase, _post_exploit_phase)
 │   │   └── planner.py           ← EngagementPlanner, EngagementBranch, EngagementPlan
 │   ├── integrations/
-│   │   ├── kali_api.py          ← HTTP client for kali-server-mcp (/api/command, /health)
+│   │   ├── kali_api.py          ← HTTP client for kali-server-mcp (/api/command, /health probe)
 │   │   ├── exploit_db.py        ← static CVE → Metasploit module map
 │   │   └── exploit_suggestion.py← ExploitSuggestionProvider (confidence-scored candidates)
 │   ├── models/

@@ -16,17 +16,58 @@ class KaliAPI:
         self.sess.headers.update({"Content-Type": "application/json"})
 
     def health(self) -> tuple[bool, str]:
+        """Return ``(ok, message)`` for the kali-server-mcp bridge.
+
+        The bridge's ``GET /health`` route exists only in newer builds of
+        kali-server-mcp; the Kali packaging has shipped versions without it.
+        When that endpoint is absent (404/405) the *mounting bridge is still
+        online*, so we fall back to exercising the command transport itself —
+        ``POST /api/command`` with a harmless ``whoami`` — which is present in
+        every build.  This keeps the status line honest: a bridge answering
+        commands reports online even when it has no dedicated health route.
+        """
+        # 1) Try the optional /health endpoint first.
         try:
             r = self.sess.get(f"{self.base}/health", timeout=5)
             if r.status_code == 200:
                 return True, "ready"
-            return False, f"HTTP {r.status_code}"
+            if r.status_code not in (404, 405):
+                # Something IS listening but reporting an error state.
+                return False, f"HTTP {r.status_code}"
+            # 404/405 → route absent on this build, keep probing below.
         except requests.ConnectionError:
             return False, "connection refused — run: kali-server-mcp"
         except requests.Timeout:
             return False, "timeout"
         except requests.RequestException as exc:
             self.log.error("health request error: %s", exc)
+            return False, str(exc)
+
+        # 2) No /health route — verify the command endpoint instead.
+        try:
+            probe = self.sess.post(
+                f"{self.base}/api/command",
+                json={"command": "whoami"},
+                timeout=10,
+            )
+            probe.raise_for_status()
+            data = probe.json()
+            succeeded = bool(
+                data.get("success", data.get("return_code", data.get("returncode", 1)) == 0)
+            )
+            if succeeded:
+                return True, "bridge ready (no /health endpoint on this build)"
+            detail = data.get("stderr") or data.get("error") or f"rc={data.get('return_code')}"
+            return False, f"command endpoint errored: {detail}"
+        except requests.ConnectionError:
+            return False, "connection refused — run: kali-server-mcp"
+        except requests.Timeout:
+            return False, "timeout"
+        except ValueError as exc:
+            self.log.error("health probe returned invalid JSON: %s", exc)
+            return False, f"invalid JSON from API: {exc}"
+        except requests.RequestException as exc:
+            self.log.error("health probe error: %s", exc)
             return False, str(exc)
 
     def run(self, command: str, timeout: int = 300) -> dict:
