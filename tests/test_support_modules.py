@@ -271,6 +271,104 @@ def test_kali_health_timeout():
     assert "timeout" in msg.lower()
 
 
+def test_kali_health_no_health_route_falls_back_to_command():
+    """Older kali-server-mcp builds lack GET /health; /api/command proves
+    the bridge is alive."""
+    api = _api()
+    payload = {"stdout": "root", "stderr": "", "return_code": 0, "success": True}
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=_resp(200, payload)),
+    ):
+        ok, msg = api.health()
+    assert ok is True
+    assert "health endpoint" in msg
+
+
+def test_kali_health_no_health_route_command_fails():
+    """Bridge answers /api/command but the probe command errors → offline."""
+    api = _api()
+    payload = {"stdout": "", "stderr": "whoami: not found", "return_code": 127, "success": False}
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=_resp(200, payload)),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert "command endpoint errored" in msg
+
+
+def test_kali_health_http_not_found_method_matches_bridge():
+    """405 (route exists, wrong verb) also falls back to command probe."""
+    api = _api()
+    payload = {"stdout": "root", "stderr": "", "return_code": 0, "success": True}
+    with (
+        patch.object(api.sess, "get", return_value=_resp(405)),
+        patch.object(api.sess, "post", return_value=_resp(200, payload)),
+    ):
+        ok, msg = api.health()
+    assert ok is True
+
+
+def test_kali_health_command_connection_refused():
+    """GET /health missing AND /api/command refused → clear diagnostic."""
+    api = _api()
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", side_effect=requests.ConnectionError("refused")),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert "connection refused" in msg.lower()
+
+
+def test_kali_health_get_request_error():
+    """Non-HTTP error on the initial GET surfaces cleanly."""
+    api = _api()
+    with patch.object(api.sess, "get", side_effect=requests.RequestException("boom")):
+        ok, msg = api.health()
+    assert ok is False
+    assert msg == "boom"
+
+
+def test_kali_health_probe_timeout():
+    """/health absent and the command probe times out → offline."""
+    api = _api()
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", side_effect=requests.Timeout("slow")),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert "timeout" in msg.lower()
+
+
+def test_kali_health_probe_invalid_json():
+    """/health absent and the command probe returns non-JSON → offline."""
+    api = _api()
+    bad = _resp(200)
+    bad.json.side_effect = ValueError("not json")
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=bad),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert "invalid JSON" in msg
+
+
+def test_kali_health_probe_request_error():
+    """/health absent and the command probe raises a request error → offline."""
+    api = _api()
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", side_effect=requests.RequestException("boom")),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert msg == "boom"
+
+
 def test_kali_run_success():
     api = _api()
     payload = {"stdout": "nmap output", "stderr": "", "return_code": 0, "success": True}

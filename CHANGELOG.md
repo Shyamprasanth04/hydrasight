@@ -5,6 +5,15 @@ All notable changes to HydraSight are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `KaliAPI.health()` no longer reports a running `kali-server-mcp` bridge as
+  offline just because the bridge build lacks the `GET /health` route (older
+  `mcp-kali-server` packages only expose `POST /api/command`). The health check
+  now falls back to probing the command endpoint with a harmless `whoami` when
+  `/health` returns 404/405, so the status line reflects reality.
+
 ## [4.1.1] — 2026-09-03
 
 ### Fixed
