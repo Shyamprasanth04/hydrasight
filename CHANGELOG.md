@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `status` reports tools the bridge itself flags as missing, e.g.
   `kali api  online  ready (bridge reports missing: nmap, gobuster, dirb, …)` —
   a bridge that is up but cannot run its tools is no longer shown as plain
-  `ready`.
+  `ready`. (The online branch of the status line previously discarded the
+  health message entirely, so only the offline case was ever verbose.)
 
 ### Fixed
 - `KaliAPI.health()` no longer reports a running `kali-server-mcp` bridge as

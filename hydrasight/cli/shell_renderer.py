@@ -51,15 +51,17 @@ def render_status(
     lhost = kali.local_ip("8.8.8.8")
     div("system status")
     console.print()
-    label(
-        "kali api",
-        (
-            f"[{P.PRIMARY}]online[/]"
-            if kali_ok
-            else f"[{P.RED}]offline[/]  [{P.MUTED}]{kali_msg}[/]"
-        ),
-        16,
-    )
+    if kali_ok:
+        # A bare "ready" is the healthy default and stays quiet; anything the
+        # bridge chose to qualify it with (e.g. missing tools) is worth showing.
+        detail = f"  [{P.MUTED}]{kali_msg}[/]" if kali_msg and kali_msg != "ready" else ""
+        label("kali api", f"[{P.PRIMARY}]online[/]{detail}", 16)
+    else:
+        label(
+            "kali api",
+            f"[{P.RED}]offline[/]  [{P.MUTED}]{kali_msg}[/]",
+            16,
+        )
     if not kali_ok:
         hint(
             f"expected a kali-server-mcp bridge on {cfg['kali_api_url']} — "
