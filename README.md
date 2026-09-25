@@ -101,6 +101,13 @@ pip install hydrasight
 cp hydrasight.json.example hydrasight.json   # point kali_api_url at your bridge
 ```
 
+`kali_api_url` is the address **your machine** uses to reach the bridge — not
+the address the bridge binds to. If `kali-server-mcp` runs on a separate Kali
+box, start it with `kali-server-mcp --ip 0.0.0.0` and set
+`kali_api_url` (or `HYDRA_KALI_URL`) to that host, e.g.
+`http://192.168.100.10:5000`. The `status` command reports exactly which URL
+was probed and which routes answered, so a mismatch is obvious.
+
 ```bash
 ollama pull qcwind/qwen3-8b-instruct-Q4-K-M:latest   # or set "model" in hydrasight.json
 ```

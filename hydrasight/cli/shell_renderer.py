@@ -17,6 +17,7 @@ from rich.padding import Padding
 from hydrasight.cli.display import (
     console,
     div,
+    hint,
     info,
     label,
     make_table,
@@ -59,6 +60,12 @@ def render_status(
         ),
         16,
     )
+    if not kali_ok:
+        hint(
+            f"expected a kali-server-mcp bridge on {cfg['kali_api_url']} — "
+            "start it there (kali-server-mcp --ip 0.0.0.0) or repoint "
+            "kali_api_url / HYDRA_KALI_URL at the Kali host"
+        )
     label(
         "ollama",
         (

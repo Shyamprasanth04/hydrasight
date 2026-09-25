@@ -13,6 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `mcp-kali-server` packages only expose `POST /api/command`). The health check
   now falls back to probing the command endpoint with a harmless `whoami` when
   `/health` returns 404/405, so the status line reflects reality.
+- `KaliAPI.health()` now returns an actionable diagnostic instead of a raw
+  `404 Client Error: Not Found for url: ...` when the configured
+  `kali_api_url` is reachable but is *not* serving a kali-server-mcp API (a
+  different service on the port, or a bridge running on another host while
+  `kali_api_url` still points at `127.0.0.1`). The message names the URL, the
+  routes that 404'd, and the config key to fix; a stray `HTTP_PROXY` /
+  `HTTPS_PROXY` in the environment is called out as a possible cause.
+- Command execution probes the known kali-server-mcp command routes
+  (`POST /api/command`, then `POST /api/exec`) and remembers the one that
+  answers, so bridges that spell the transport differently still work.
+- `status` prints a `[?]` hint explaining where the bridge is expected and how
+  to repoint `kali_api_url` / `HYDRA_KALI_URL` when the bridge is offline.
 
 ## [4.1.1] — 2026-09-03
 

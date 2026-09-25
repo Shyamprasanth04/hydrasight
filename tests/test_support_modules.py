@@ -343,6 +343,102 @@ def test_kali_health_probe_timeout():
     assert "timeout" in msg.lower()
 
 
+def test_kali_health_alternate_health_route():
+    """/health absent but /api/health answers → online."""
+    api = _api()
+    with patch.object(api.sess, "get", return_value=_resp(200)):
+        ok, msg = api.health()
+    assert ok is True
+    assert msg == "ready"
+
+
+def test_kali_health_no_routes_at_all():
+    """Every known route 404s → an actionable diagnostic, not a raw 404 dump."""
+    api = _api()
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=_resp(404)),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert "no kali-server-mcp API" in msg
+    assert "http://127.0.0.1:5000" in msg
+    assert "kali_api_url" in msg
+
+
+def test_kali_health_no_routes_reports_every_absent_route():
+    """The message names the routes that 404'd so the cause is obvious."""
+    api = _api()
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=_resp(404)),
+    ):
+        ok, msg = api.health()
+    for route in ("/health", "/api/health", "/api/command", "/api/exec"):
+        assert route in msg
+
+
+def test_kali_health_alternate_command_route():
+    """/api/command absent but /api/exec answers → bridge is online."""
+    api = _api()
+    payload = {"stdout": "root", "stderr": "", "return_code": 0, "success": True}
+
+    def post(url, *a, **kw):
+        return _resp(200, payload) if url.endswith("/api/exec") else _resp(404)
+
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", side_effect=post),
+    ):
+        ok, msg = api.health()
+    assert ok is True
+    assert "health endpoint" in msg
+
+
+def test_kali_health_no_routes_mentions_proxy_env(monkeypatch):
+    """A stray proxy env var is a classic cause of a bogus 404 — call it out."""
+    api = _api()
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:8080")
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=_resp(404)),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert "HTTP_PROXY" in msg
+
+
+def test_kali_health_remote_host_has_no_loopback_hint():
+    """A non-loopback URL must not be told "the bridge runs on another host"."""
+    api = KaliAPI("http://192.168.100.10:5000", logging.getLogger("t"))
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=_resp(404)),
+    ):
+        ok, msg = api.health()
+    assert ok is False
+    assert "another host" not in msg
+    assert "192.168.100.10:5000" in msg
+
+
+def test_kali_health_resets_absent_routes_each_probe():
+    """Repeated probes must not accumulate stale absent-route bookkeeping."""
+    api = _api()
+    with (
+        patch.object(api.sess, "get", return_value=_resp(404)),
+        patch.object(api.sess, "post", return_value=_resp(404)),
+    ):
+        api.health()
+        api.health()
+    assert api.absent_routes == ["/health", "/api/health"]
+
+
+def test_kali_health_malformed_url_is_not_treated_as_local():
+    """An unparseable URL must not crash the loopback heuristic."""
+    api = KaliAPI("http://[::1", logging.getLogger("t"))
+    assert api._is_local_host() is False
+
+
 def test_kali_health_probe_invalid_json():
     """/health absent and the command probe returns non-JSON → offline."""
     api = _api()
@@ -410,6 +506,67 @@ def test_kali_run_bad_json():
         res = api.run("cmd")
     assert res["success"] is False
     assert "invalid JSON" in res["error"]
+
+
+def test_kali_run_timeout_flag_from_bridge():
+    """A bridge-side timeout is surfaced in the output, not swallowed."""
+    api = _api()
+    payload = {
+        "stdout": "partial scan",
+        "stderr": "",
+        "return_code": -1,
+        "success": False,
+        "timed_out": True,
+    }
+    with patch.object(api.sess, "post", return_value=_resp(200, payload)):
+        res = api.run("nmap -p- 10.0.0.1", timeout=5)
+    assert res["timed_out"] is True
+    assert "[TIMED OUT after 5s]" in res["output"]
+    assert "partial scan" in res["output"]
+
+
+def test_kali_run_http_error_from_bridge():
+    """A 500 from the bridge is reported as an API error."""
+    api = _api()
+    resp = _resp(500)
+    resp.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
+    with patch.object(api.sess, "post", return_value=resp):
+        res = api.run("cmd")
+    assert res["success"] is False
+    assert "500 Server Error" in res["error"]
+
+
+def test_kali_run_falls_back_to_alternate_command_route():
+    """/api/command 404s on this build — /api/exec is tried instead."""
+    api = _api()
+    payload = {"stdout": "uid=0(root)", "stderr": "", "return_code": 0, "success": True}
+    calls: list[str] = []
+
+    def post(url, *a, **kw):
+        calls.append(url)
+        return _resp(200, payload) if url.endswith("/api/exec") else _resp(404)
+
+    with patch.object(api.sess, "post", side_effect=post):
+        res = api.run("id")
+    assert res["success"] is True
+    assert "uid=0(root)" in res["output"]
+    assert calls == ["http://127.0.0.1:5000/api/command", "http://127.0.0.1:5000/api/exec"]
+    # The working route is remembered, so the next call skips the dead one.
+    with patch.object(api.sess, "post", side_effect=post):
+        api.run("id")
+    assert calls[-1] == "http://127.0.0.1:5000/api/exec"
+    assert api.command_route == "/api/exec"
+
+
+def test_kali_run_no_command_route_anywhere():
+    """No route answers → a diagnostic naming the URL and the config key."""
+    api = _api()
+    with patch.object(api.sess, "post", return_value=_resp(404)):
+        res = api.run("id")
+    assert res["success"] is False
+    assert res["returncode"] == -1
+    assert "no kali-server-mcp API" in res["error"]
+    assert "kali_api_url" in res["error"]
 
 
 def test_local_ip_parses_address():

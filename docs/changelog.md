@@ -15,6 +15,11 @@ in the repository root.
   `GET /health` route (older `mcp-kali-server` packages only serve
   `POST /api/command`) — the check falls back to a harmless `whoami` command
   probe.
+- An unreachable-or-wrong `kali_api_url` now yields an actionable diagnostic
+  (the URL probed, the routes that 404'd, and the config key to fix) instead of
+  a raw `404 Client Error`, and a stray `HTTP_PROXY` is reported as a possible
+  cause. Command execution also falls back across the known command routes
+  (`/api/command`, `/api/exec`) and caches the one that answers.
 
 ## 4.1.1
 
