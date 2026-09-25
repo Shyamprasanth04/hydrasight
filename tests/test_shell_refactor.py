@@ -118,6 +118,90 @@ class TestRendererFunctions:
         with patch("hydrasight.cli.shell_renderer.console"):
             render_verify_results([mock_result])
 
+    def test_render_status_offline_prints_hint(self):
+        """An unreachable bridge must print how to point HydraSight at it."""
+        from hydrasight.cli.shell_renderer import render_status
+
+        mock_kali = MagicMock()
+        mock_kali.health.return_value = (
+            False,
+            "no kali-server-mcp API at http://127.0.0.1:5000",
+        )
+        mock_kali.local_ip.return_value = "127.0.0.1"
+        mock_ai = MagicMock()
+        mock_ai.health.return_value = (True, "ready")
+        cfg = {
+            "model": "test",
+            "lport": 4444,
+            "output_dir": "out",
+            "verbosity": 1,
+            "execution_mode": "confirm",
+            "kali_api_url": "http://127.0.0.1:5000",
+        }
+        with (
+            patch("hydrasight.cli.shell_renderer.console"),
+            patch("hydrasight.cli.shell_renderer.hint") as hint,
+        ):
+            render_status(mock_kali, mock_ai, cfg)
+        hint.assert_called_once()
+        assert "HYDRA_KALI_URL" in hint.call_args[0][0]
+
+    def test_render_status_online_shows_bridge_qualifier(self):
+        """A qualified "ready" (missing tools) must reach the operator."""
+        from hydrasight.cli.shell_renderer import render_status
+
+        mock_kali = MagicMock()
+        mock_kali.health.return_value = (
+            True,
+            "ready (bridge reports missing: nmap, gobuster, dirb, …)",
+        )
+        mock_kali.local_ip.return_value = "127.0.0.1"
+        mock_ai = MagicMock()
+        mock_ai.health.return_value = (True, "ready")
+        cfg = {
+            "model": "test",
+            "lport": 4444,
+            "output_dir": "out",
+            "verbosity": 1,
+            "execution_mode": "confirm",
+            "kali_api_url": "http://127.0.0.1:5000",
+        }
+        with (
+            patch("hydrasight.cli.shell_renderer.console"),
+            patch("hydrasight.cli.shell_renderer.hint") as hint,
+            patch("hydrasight.cli.shell_renderer.label") as lab,
+        ):
+            render_status(mock_kali, mock_ai, cfg)
+        hint.assert_not_called()
+        key, value = lab.call_args_list[0].args[0], lab.call_args_list[0].args[1]
+        assert key == "kali api"
+        assert "bridge reports missing" in value
+
+    def test_render_status_online_plain_ready_stays_quiet(self):
+        """A plain "ready" must not add noise to the status line."""
+        from hydrasight.cli.shell_renderer import render_status
+
+        mock_kali = MagicMock()
+        mock_kali.health.return_value = (True, "ready")
+        mock_kali.local_ip.return_value = "127.0.0.1"
+        mock_ai = MagicMock()
+        mock_ai.health.return_value = (True, "ready")
+        cfg = {
+            "model": "test",
+            "lport": 4444,
+            "output_dir": "out",
+            "verbosity": 1,
+            "execution_mode": "confirm",
+            "kali_api_url": "http://127.0.0.1:5000",
+        }
+        with (
+            patch("hydrasight.cli.shell_renderer.console"),
+            patch("hydrasight.cli.shell_renderer.label") as lab,
+        ):
+            render_status(mock_kali, mock_ai, cfg)
+        assert "online" in lab.call_args_list[0].args[1]
+        assert "ready" not in lab.call_args_list[0].args[1]
+
     def test_render_stats(self):
         import time
 

@@ -53,6 +53,10 @@ def err(msg: str) -> None:
     console.print(f"  [{P.RED}][x][/]  [{P.RED}]{msg}[/]")
 
 
+def hint(msg: str) -> None:
+    console.print(f"  [{P.DIM}][?][/]  [{P.MUTED}]{msg}[/]")
+
+
 def hit(msg: str) -> None:
     console.print(f"  [{P.BRIGHT}][*][/]  [{P.BRIGHT}]{msg}[/]")
 
