@@ -10,6 +10,10 @@ in the repository root.
 
 ## Unreleased
 
+### Added
+- `status` surfaces tools the bridge reports missing from `/health`
+  (`ready (bridge reports missing: nmap, …)`).
+
 ### Fixed
 - `KaliAPI.health()` reports a bridge as online even when its build lacks the
   `GET /health` route (older `mcp-kali-server` packages only serve
