@@ -352,6 +352,56 @@ def test_kali_health_alternate_health_route():
     assert msg == "ready"
 
 
+def test_kali_health_reports_tools_the_bridge_says_are_missing():
+    """A healthy bridge with missing tools must say so, not just "ready"."""
+    api = _api()
+    payload = {
+        "status": "healthy",
+        "all_essential_tools_available": False,
+        "tools_status": {"nmap": False, "gobuster": False, "dirb": False, "nikto": False},
+    }
+    with patch.object(api.sess, "get", return_value=_resp(200, payload)):
+        ok, msg = api.health()
+    assert ok is True
+    assert "bridge reports missing" in msg
+    assert "nmap" in msg
+    assert "…" in msg  # list truncated at _MAX_LISTED_TOOLS
+    assert "nikto" not in msg
+
+
+def test_kali_health_reports_missing_tools_flag_only():
+    """Only the aggregate flag set → still surfaced, without a tool list."""
+    api = _api()
+    payload = {"status": "healthy", "all_essential_tools_available": False}
+    with patch.object(api.sess, "get", return_value=_resp(200, payload)):
+        ok, msg = api.health()
+    assert ok is True
+    assert msg == "ready (bridge reports essential tools missing)"
+
+
+def test_kali_health_healthy_body_stays_plain_ready():
+    """A bridge reporting all tools present must not gain noise."""
+    api = _api()
+    payload = {
+        "status": "healthy",
+        "all_essential_tools_available": True,
+        "tools_status": {"nmap": True, "gobuster": True, "dirb": True, "nikto": True},
+    }
+    with patch.object(api.sess, "get", return_value=_resp(200, payload)):
+        ok, msg = api.health()
+    assert (ok, msg) == (True, "ready")
+
+
+def test_kali_health_unparseable_health_body():
+    """Non-JSON 200 body → plain "ready", no crash."""
+    api = _api()
+    resp = _resp(200)
+    resp.json.side_effect = ValueError("not json")
+    with patch.object(api.sess, "get", return_value=resp):
+        ok, msg = api.health()
+    assert (ok, msg) == (True, "ready")
+
+
 def test_kali_health_no_routes_at_all():
     """Every known route 404s → an actionable diagnostic, not a raw 404 dump."""
     api = _api()

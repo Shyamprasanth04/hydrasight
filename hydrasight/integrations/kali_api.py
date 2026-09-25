@@ -19,6 +19,8 @@ HEALTH_ROUTES: tuple[str, ...] = ("/health", "/api/health")
 COMMAND_ROUTES: tuple[str, ...] = ("/api/command", "/api/exec")
 
 _PROBE_COMMAND = "whoami"
+# How many missing tools the status line lists before truncating.
+_MAX_LISTED_TOOLS = 3
 # Flask answers 404 for an unknown path and 405 for a known path used with the
 # wrong verb — both mean "this build does not expose that route".
 _ROUTE_ABSENT = frozenset({404, 405})
@@ -106,13 +108,43 @@ class KaliAPI:
         for route in HEALTH_ROUTES:
             r = self.sess.get(f"{self.base}{route}", timeout=5)
             if r.status_code == 200:
-                return True, "ready"
+                return True, self._health_detail(r)
             if r.status_code not in _ROUTE_ABSENT:
                 # Something IS listening but reporting an error state.
                 return False, f"HTTP {r.status_code} from {route}"
             # 404/405 → route absent on this build, keep probing below.
             self.absent_routes.append(route)
         return None
+
+    @staticmethod
+    def _health_detail(r: requests.Response) -> str:
+        """Summarise a 200 liveness body, flagging tools the bridge reports missing.
+
+        The stock bridge answers ``/health`` with a ``tools_status`` map.  When
+        it reports essential tools as missing, the bridge is online but every
+        scan will fail — worth saying out loud instead of a bare "ready".
+        (Some Kali builds mis-report this, hence the "bridge reports" wording.)
+        """
+        try:
+            data = r.json()
+        except ValueError:
+            return "ready"
+        if not isinstance(data, dict):
+            return "ready"
+        status = data.get("tools_status")
+        missing = (
+            [str(name) for name, present in status.items() if not present]
+            if isinstance(status, dict)
+            else []
+        )
+        if missing:
+            shown = ", ".join(missing[:_MAX_LISTED_TOOLS])
+            if len(missing) > _MAX_LISTED_TOOLS:
+                shown += ", …"
+            return f"ready (bridge reports missing: {shown})"
+        if data.get("all_essential_tools_available") is False:
+            return "ready (bridge reports essential tools missing)"
+        return "ready"
 
     def _probe_command_transport(self) -> tuple[bool, str]:
         """Prove the bridge is alive by running a harmless command."""
